@@ -2,19 +2,19 @@ use core::panic;
 
 use chrono::{DateTime, Utc};
 use clipboard_rs::{Clipboard, ClipboardContext};
-use color_eyre::Result;
+use color_eyre::{owo_colors::OwoColorize, Result};
 use crossterm::event::{
     self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, ModifierKeyCode,
 };
 use rand::distr::{Alphanumeric, SampleString};
 use ratatui::{
-    layout::{Constraint, Flex, Layout, Offset, Position, Rect},
-    style::{Color, Style, Stylize},
-    text::{Line, Text},
-    widgets::{Block, List, ListItem, Paragraph},
-    DefaultTerminal, Frame,
+    DefaultTerminal, Frame, layout::{Constraint, Flex, Layout, Offset, Position, Rect}, style::{Color, Style, Stylize}, text::{Line, Text}, widgets::{Block, Clear, List, ListItem, Paragraph}
 };
-use serde::{Deserialize, Serialize};
+use serde::{de, Deserialize, Serialize};
+
+use crate::widgets::{confirm::ConfirmDialog, text_input::TextInput};
+
+pub mod widgets;
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 struct Field {
@@ -50,157 +50,34 @@ impl ActiveWidget {
     }
 }
 
-struct TextInput {
-    input: String,
-    character_index: usize,
-    active: bool,
-}
-
-impl TextInput {
-    pub fn new() -> Self {
-        Self {
-            input: String::default(),
-            character_index: 0,
-            active: false,
-        }
-    }
-
-    pub fn from_text(text: String) -> Self {
-        let len = text.len();
-        Self {
-            input: text,
-            character_index: len,
-            active: false,
-        }
-    }
-
-    pub fn set_active(&mut self, active: bool) {
-        self.active = active
-    }
-
-    pub fn set_input(&mut self, input: String) {
-        self.character_index = input.len();
-        self.input = input;
-    }
-
-    pub fn submit_input(&mut self) -> String {
-        let mut empty = String::default();
-        std::mem::swap(&mut self.input, &mut empty);
-        self.character_index = 0;
-        empty
-    }
-
-    pub fn input(&mut self, key: &KeyEvent) {
-        if !self.active {
-            return;
-        }
-        match key.code {
-            KeyCode::Char(to_insert) => self.enter_char(to_insert),
-            KeyCode::Backspace => self.delete_char(),
-            KeyCode::Left => self.move_cursor_left(),
-            KeyCode::Right => self.move_cursor_right(),
-            _ => {}
-        }
-    }
-
-    pub fn draw(&self, frame: &mut Frame, rect: Rect, title: &str) {
-        let popup = Paragraph::new(self.input.as_str())
-            .style(if self.active {
-                Style::default().fg(Color::Yellow)
-            } else {
-                Style::default()
-            })
-            .block(Block::bordered().title(title));
-        frame.render_widget(popup, rect);
-        if self.active {
-            frame.set_cursor_position(Position::new(
-                // Draw the cursor at the current position in the input field.
-                // This position is can be controlled via the left and right arrow key
-                rect.x + self.character_index as u16 + 1,
-                // Move one line down, from the border to the input line
-                rect.y + 1,
-            ))
-        }
-    }
-
-    fn move_cursor_left(&mut self) {
-        let cursor_moved_left = self.character_index.saturating_sub(1);
-        self.character_index = self.clamp_cursor(cursor_moved_left);
-    }
-
-    fn move_cursor_right(&mut self) {
-        let cursor_moved_right = self.character_index.saturating_add(1);
-        self.character_index = self.clamp_cursor(cursor_moved_right);
-    }
-
-    fn enter_char(&mut self, new_char: char) {
-        let index = self.byte_index();
-        self.input.insert(index, new_char);
-        self.move_cursor_right();
-    }
-
-    /// Returns the byte index based on the character position.
-    ///
-    /// Since each character in a string can be contain multiple bytes, it's necessary to calculate
-    /// the byte index based on the index of the character.
-    fn byte_index(&self) -> usize {
-        self.input
-            .char_indices()
-            .map(|(i, _)| i)
-            .nth(self.character_index)
-            .unwrap_or(self.input.len())
-    }
-
-    fn delete_char(&mut self) {
-        let is_not_cursor_leftmost = self.character_index != 0;
-        if is_not_cursor_leftmost {
-            // Method "remove" is not used on the saved text for deleting the selected char.
-            // Reason: Using remove on String works on bytes instead of the chars.
-            // Using remove would require special care because of char boundaries.
-
-            let current_index = self.character_index;
-            let from_left_to_current_index = current_index - 1;
-
-            // Getting all characters before the selected character.
-            let before_char_to_delete = self.input.chars().take(from_left_to_current_index);
-            // Getting all characters after selected character.
-            let after_char_to_delete = self.input.chars().skip(current_index);
-
-            // Put all characters together except the selected one.
-            // By leaving the selected one out, it is forgotten and therefore deleted.
-            self.input = before_char_to_delete.chain(after_char_to_delete).collect();
-            self.move_cursor_left();
-        }
-    }
-
-    fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
-        new_cursor_pos.clamp(0, self.input.chars().count())
-    }
-}
-
 struct EntryEditor {
-    position: i32,
     entry: Entry,
+    /// ID of current field (-1 for none)
+    selected: i32,
+    /// ID of copied field (-1 for none)
     copied: i32,
     editor: Option<FieldEditor>,
+    confirm: Option<ConfirmDialog<'static>>,
 }
 
 impl EntryEditor {
     pub fn new(entry: Entry) -> Self {
         Self {
-            position: -1,
             entry,
+            selected: -1,
             copied: -1,
             editor: None,
+            confirm: None,
         }
     }
 
     pub fn input(&mut self, key: &KeyEvent) -> bool {
+        // Field editor
         if let Some(editor) = &mut self.editor {
             if let Some(field) = editor.input(key) {
                 if let Some(field) = field {
-                    if self.position != -1 {
-                        self.entry.fields[self.position as usize] = field;
+                    if self.selected != -1 {
+                        self.entry.fields[self.selected as usize] = field;
                     } else {
                         self.entry.fields.push(field);
                     }
@@ -210,34 +87,69 @@ impl EntryEditor {
             }
             return false;
         }
+
+        // Delete confirm box
+        if let Some(confirm) = &mut self.confirm {
+            if let Some(val) = confirm.input(key) {
+                if val {
+                    self.entry.fields.remove(self.selected as usize);
+					self.selected = -1;
+					self.copied = -1;
+                }
+                self.confirm = None;
+            }
+            return false;
+        }
+
         match key.code {
             KeyCode::Up | KeyCode::Char('k') | KeyCode::BackTab => {
-                self.position = std::cmp::max(self.position - 1, 0)
+                self.selected = std::cmp::max(self.selected - 1, 0);
+				if self.entry.fields.is_empty() {
+					self.selected = -1
+				}
+				
             }
             KeyCode::Down | KeyCode::Char('j') | KeyCode::Tab => {
-                self.position = std::cmp::min(
-                    self.position + 1,
+                self.selected = std::cmp::min(
+                    self.selected + 1,
                     self.entry.fields.len().saturating_sub(1) as i32,
-                )
+                );
+				if self.entry.fields.is_empty() {
+					self.selected = -1
+				}
             }
 
             KeyCode::Char('y') | KeyCode::Enter => {
-                if self.position != -1 {
-                    self.copied = self.position;
+                if self.selected != -1 {
+                    self.copied = self.selected;
                     let ctx = ClipboardContext::new().unwrap();
-                    ctx.set_text(self.entry.fields[self.position as usize].value.clone())
+                    ctx.set_text(self.entry.fields[self.selected as usize].value.clone())
                         .unwrap();
                 }
             }
             KeyCode::Char('e') => {
-                if self.position != -1 {
+                if self.selected != -1 {
                     self.editor = Some(FieldEditor::from_field(
-                        &self.entry.fields[self.position as usize],
+                        &self.entry.fields[self.selected as usize],
                     ))
                 }
             }
+            KeyCode::Backspace | KeyCode::Delete | KeyCode::Char('d') => {
+                if self.selected != -1 {
+                    let title = Line::from(vec!["Confirm".into()]);
+                    let desc = Line::from(vec![
+                        "Delete field '".into(),
+                        self.entry.fields[self.selected as usize]
+                            .name
+                            .clone()
+                            .fg(Color::Blue),
+                        "'?".into(),
+                    ]);
+                    self.confirm = Some(ConfirmDialog::new(title, vec![ListItem::from(desc)]));
+                }
+            }
             KeyCode::Char('a') => {
-                self.position = -1;
+                self.selected = -1;
                 self.editor = Some(FieldEditor::new());
             }
             KeyCode::Esc if self.editor.is_none() => return true,
@@ -271,8 +183,8 @@ impl EntryEditor {
             let title = format!(
                 "{} > {}",
                 self.entry.name,
-                if self.position != -1 {
-                    &self.entry.fields[self.position as usize].name
+                if self.selected != -1 {
+                    &self.entry.fields[self.selected as usize].name
                 } else {
                     "New Field"
                 }
@@ -293,13 +205,17 @@ impl EntryEditor {
             .map(|(id, ent)| {
                 ListItem::new(Self::format_field(
                     ent,
-                    id as i32 == self.position,
+                    id as i32 == self.selected,
                     id as i32 == self.copied,
                 ))
             })
             .collect::<Vec<_>>();
         let messages = List::new(items).block(Block::bordered().title(self.entry.name.as_str()));
         frame.render_widget(messages, rect);
+
+        if let Some(confirm) = &self.confirm {
+            confirm.draw(frame);
+        }
     }
 }
 
@@ -314,9 +230,9 @@ enum ActiveField {
 }
 
 struct FieldEditor {
-    name: TextInput,
-    value: TextInput,
-    generator: Option<TextInput>,
+    name: TextInput<'static>,
+    value: TextInput<'static>,
+    generator: Option<TextInput<'static>>,
     hidden: bool,
     active: ActiveField,
 }
@@ -328,8 +244,8 @@ struct FieldEditor {
 impl FieldEditor {
     pub fn new() -> Self {
         Self {
-            name: TextInput::new(),
-            value: TextInput::new(),
+            name: TextInput::new(Line::from("Name"), Constraint::Percentage(100)),
+            value: TextInput::new(Line::from("Value"), Constraint::Percentage(100)),
             generator: None,
             hidden: false,
             active: ActiveField::default(),
@@ -338,32 +254,34 @@ impl FieldEditor {
 
     pub fn set_active(&mut self, active: ActiveField) {
         match self.active {
-            ActiveField::Name => self.name.active = false,
-            ActiveField::Value => self.value.active = false,
+            ActiveField::Name => self.name.set_active(false),
+            ActiveField::Value => self.value.set_active(false),
             _ => {}
         }
         self.active = active;
         match self.active {
-            ActiveField::Name => self.name.active = true,
-            ActiveField::Value => self.value.active = true,
+            ActiveField::Name => self.name.set_active(true),
+            ActiveField::Value => self.value.set_active(true),
             _ => {}
         }
     }
 
     pub fn from_field(field: &Field) -> Self {
         Self {
-            name: TextInput::from_text(field.name.clone()),
-            value: TextInput::from_text(field.value.clone()),
+			name: TextInput::new(Line::from("Name"), Constraint::Percentage(100))
+				.with_input(field.name.clone()),
+			value: TextInput::new(Line::from("Value"), Constraint::Percentage(100))
+				.with_input(field.value.clone()),
             hidden: field.hidden,
             active: ActiveField::default(),
             generator: None,
         }
     }
 
-    fn submit(&self) -> Field {
+    fn submit(&mut self) -> Field {
         Field {
-            name: self.name.input.clone(),
-            value: self.value.input.clone(),
+            name: self.name.submit(),
+            value: self.value.submit(),
             hidden: self.hidden,
         }
     }
@@ -372,7 +290,7 @@ impl FieldEditor {
         // Password generator
         if let Some(generator) = &mut self.generator {
             if key.code == KeyCode::Enter {
-                if let Ok(length) = generator.submit_input().parse::<i32>() {
+                if let Ok(length) = generator.submit().parse::<i32>() {
                     if length > 0 {
                         let generated =
                             Alphanumeric.sample_string(&mut rand::rng(), length as usize);
@@ -413,13 +331,20 @@ impl FieldEditor {
             KeyCode::Char(' ') if self.active == ActiveField::Hidden => self.hidden = !self.hidden,
             KeyCode::Char('g') if ctrl_pressed => match self.active {
                 ActiveField::Name | ActiveField::Value => {
-                    let mut generator = TextInput::from_text("64".into());
+                    let mut generator = TextInput::new(Line::from("Length"), Constraint::Percentage(100))
+						.with_input("64".into());
                     generator.set_active(true);
                     self.generator = Some(generator)
                 }
                 _ => {}
             },
-            KeyCode::Enter => return Some(Some(self.submit())),
+            KeyCode::Enter => {
+                let field = self.submit();
+                if field.name.trim().is_empty() {
+                    return Some(None);
+                }
+                return Some(Some(field));
+            }
             KeyCode::Esc => return Some(None),
             _ => match self.active {
                 ActiveField::Name => self.name.input(key),
@@ -434,7 +359,7 @@ impl FieldEditor {
         if let Some(generator) = &self.generator {
             let mut area = rect;
             area.height = 3;
-            generator.draw(frame, area, "Length");
+            generator.draw(frame, area);
             return;
         }
         let boxed = Block::bordered().title(title);
@@ -461,9 +386,9 @@ impl FieldEditor {
         let help_message = Paragraph::new(text);
         frame.render_widget(help_message, area.offset(Offset::new(0, 1)));
         self.name
-            .draw(frame, area.offset(Offset::new(0, 2)), "Name");
+            .draw(frame, area.offset(Offset::new(0, 2)));
         self.value
-            .draw(frame, area.offset(Offset::new(0, 5)), "Value");
+            .draw(frame, area.offset(Offset::new(0, 5)));
 
         // Checkbox
         let fg = if self.active == ActiveField::Hidden {
@@ -486,8 +411,8 @@ impl FieldEditor {
 }
 
 struct App {
-    search: TextInput,
-    add_entry: TextInput,
+    search: TextInput<'static>,
+    add_entry: TextInput<'static>,
     active_widget: ActiveWidget,
     entries: Vec<Entry>,
     filtered_entries: Vec<usize>,
@@ -530,8 +455,8 @@ impl App {
         ];
         let filtered = (0..entries.len()).collect::<Vec<_>>();
         Self {
-            search: TextInput::new(),
-            add_entry: TextInput::new(),
+            search: TextInput::new(Line::from("Search"), Constraint::Percentage(100)),
+            add_entry: TextInput::new(Line::from("New Entry"), Constraint::Percentage(100)),
             active_widget: ActiveWidget::default(),
             entries,
             filtered_entries: filtered,
@@ -576,7 +501,7 @@ impl App {
                         KeyCode::Up => {
                             self.entries_position = std::cmp::max(self.entries_position - 1, 0);
                         }
-                        KeyCode::Enter => {
+                        KeyCode::Enter | KeyCode::Char('e') => {
                             if self.entries_position != -1 {
                                 self.editor = Some(EntryEditor::new(
                                     self.entries
@@ -597,7 +522,7 @@ impl App {
                             KeyCode::Enter => {}
                             KeyCode::Esc => {
                                 if self.active_widget == ActiveWidget::AddEntry {
-                                    self.add_entry.submit_input();
+                                    self.add_entry.submit();
                                 }
                                 self.set_active(ActiveWidget::None)
                             }
@@ -656,7 +581,7 @@ impl App {
         frame.render_widget(help_message, help_area);
 
         // Search
-        self.search.draw(frame, search_area, "Search");
+        self.search.draw(frame, search_area);
 
         // Content
         let items = self
@@ -682,7 +607,7 @@ impl App {
             }
 
             let popup_area = centered_area(frame.area(), 60, 3);
-            self.add_entry.draw(frame, popup_area, "New Entry");
+            self.add_entry.draw(frame, popup_area);
         }
 
         // Editor
