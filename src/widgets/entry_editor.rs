@@ -36,6 +36,8 @@ pub struct EntryEditor {
 	editor: Option<FieldEditor<'static>>,
 	/// Confirm dialog
 	confirm: Option<ConfirmDialog<'static>>,
+	/// Set to true if modified
+	modified: bool,
 
 	list_state: RefCell<ListState>,
 	scrollbar: RefCell<ScrollbarState>,
@@ -50,6 +52,7 @@ impl EntryEditor {
 			copied: -1,
 			editor: None,
 			confirm: None,
+			modified: false,
 			list_state: RefCell::default(),
 			scrollbar: RefCell::new(ScrollbarState::new(num_fields).position(0)),
 		}
@@ -112,7 +115,24 @@ impl EntryEditor {
 		*/
 
 		let ctrl_pressed = key.modifiers.contains(KeyModifiers::CONTROL);
+		let shift_pressed = key.modifiers.contains(KeyModifiers::SHIFT);
 		match key.code {
+			// Reorder
+			KeyCode::Up if shift_pressed => {
+				if self.selected > 0 {
+					self.entry.fields.swap(self.selected as usize, self.selected as usize - 1);
+					self.move_cursor(-1);
+					self.modified = true;
+				}
+			}
+			KeyCode::Down if shift_pressed => {
+				if self.selected != -1 && self.selected + 1 != self.entry.fields.len() as i32 {
+					self.entry.fields.swap(self.selected as usize, self.selected as usize + 1);
+					self.move_cursor(1);
+					self.modified = true;
+				}
+			}
+
 			// Movement
 			KeyCode::Up | KeyCode::Char('k') | KeyCode::BackTab => self.move_cursor(-1),
 			KeyCode::Char('p') if ctrl_pressed => self.move_cursor(-1),
@@ -175,7 +195,7 @@ impl EntryEditor {
 
 	fn field_preview(
 		width: u16,
-		field: &Field,
+		field: Option<&Field>,
 		selected: bool,
 		yanked: bool,
 		id: usize,
@@ -187,33 +207,47 @@ impl EntryEditor {
 		];
 		let sep = std::cmp::max((width as f32 * 0.3) as u16, 20);
 
-		let value: Span = if field.hidden {
-			"*****".fg(Color::Red)
+		let item = if let Some(field) = field {
+			let name = Span::from(field.name.as_str().bold());
+
+			let value: Span = if field.hidden {
+				"*****".fg(Color::Red)
+			} else {
+				match &field.value {
+					FieldValue::Text(s) => s.as_str().italic(),
+					FieldValue::Url(s) => s.as_str().underlined().fg(Color::Blue), // TODO HYPERLINK
+					FieldValue::Phone(s) => s.as_str().bold().fg(Color::Yellow),
+					FieldValue::Email(s) => s.as_str().underlined().fg(Color::Green), // TODO HYPERLINK
+					FieldValue::TOTPRFC6238(_) => todo!(),
+					FieldValue::TOTPSteam(_) => todo!(),
+					FieldValue::TwoFactorRecovery(two_facodes) => todo!(),
+					FieldValue::Binary { mimetype, base64 } => todo!(),
+				}
+			};
+			let modifiers = if yanked {
+				" 󱓥".fg(Color::Red)
+			} else {
+				Span::from("")
+			};
+
+			let padding_width = (sep).saturating_sub(1 + name.width() as u16);
+			let spacer = Span::styled(
+				" ".repeat(padding_width as usize),
+				ratatui::style::Style::default(),
+			);
+
+			ListItem::new(Line::from(vec![
+				" ".into(),
+				name,
+				spacer,
+				"| ".fg(Color::DarkGray),
+				value,
+				modifiers,
+			]))
 		} else {
-			match &field.value {
-				FieldValue::Text(s) => s.as_str().italic(),
-				FieldValue::Url(s) => s.as_str().underlined().fg(Color::Blue), // TODO HYPERLINK
-				FieldValue::Phone(s) => s.as_str().bold().fg(Color::Yellow),
-				FieldValue::Email(s) => s.as_str().underlined().fg(Color::Green), // TODO HYPERLINK
-				FieldValue::TOTPRFC6238(_) => todo!(),
-				FieldValue::TOTPSteam(_) => todo!(),
-				FieldValue::TwoFactorRecovery(two_facodes) => todo!(),
-				FieldValue::Binary { mimetype, base64 } => todo!(),
-			}
-		};
-		let modifiers = if yanked {
-			" 󱓥".fg(Color::Red)
-		} else {
-			Span::from("")
+			ListItem::new(Line::from(vec![]))
 		};
 
-		let item = ListItem::new(Line::from(vec![
-			" ".into(),
-			field.name.as_str().bold(),
-			": ".into(),
-			value,
-			modifiers,
-		]));
 		if selected {
 			item.bg(bg_cols[2])
 			//list.underlined()
@@ -242,7 +276,16 @@ impl EntryEditor {
 		//	return;
 		//}
 
-		let title = Line::from(vec![self.entry.name.as_str().fg(Color::Cyan).bold()]);
+		let title = Line::from(
+			vec![
+			self.entry.name.as_str().fg(Color::Cyan).bold(),
+			if self.modified {
+				"󰽂 ".fg(Color::Magenta).bold()
+			} else {
+				"  ".into()
+			}
+			]
+			);
 		let help = Line::from(vec![
 			" ⮁".bold().fg(Color::Green),
 			" (navigate) ".into(),
@@ -260,7 +303,7 @@ impl EntryEditor {
 		let vertical = Layout::vertical([Constraint::Length(1), Constraint::Percentage(100)]);
 		let [help_area, content_area] = vertical.areas(rect);
 
-		let items = self
+		let mut items = self
 			.entry
 			.fields
 			.iter()
@@ -268,13 +311,16 @@ impl EntryEditor {
 			.map(|(id, ent)| {
 				Self::field_preview(
 					content_area.width,
-					ent,
+					Some(ent),
 					id as i32 == self.selected,
 					id as i32 == self.copied,
 					id,
 				)
 			})
 			.collect::<Vec<_>>();
+		while items.len() < content_area.height as usize {
+			items.push(Self::field_preview(content_area.width, None, false, false, items.len()));
+		}
 		let messages = List::new(items).block(
 			Block::default()
 				.title(title)
