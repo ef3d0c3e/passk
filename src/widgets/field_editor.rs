@@ -1,4 +1,4 @@
-use crate::Field;
+use crate::data::field::Field;
 use crate::widgets::text_input::TextInput;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
@@ -40,6 +40,7 @@ pub struct FieldEditor<'s> {
 	generator: Option<TextInput<'s>>,
 }
 
+/*
 /* Name   : [.....]
  * Value  : [.....]
  * Hidden : [x]
@@ -81,11 +82,12 @@ impl<'s> FieldEditor<'s> {
 	}
 
 	fn submit(&mut self) -> Field {
-		Field {
-			name: self.name.submit(),
-			value: self.value.submit(),
-			hidden: self.hidden,
-		}
+		todo!();
+		//Field {
+		//	name: self.name.submit(),
+		//	value: self.value.submit(),
+		//	hidden: self.hidden,
+		//}
 	}
 
 	pub fn input(&mut self, key: &KeyEvent) -> Option<Option<Field>> {
@@ -213,3 +215,4 @@ impl<'s> FieldEditor<'s> {
 		frame.render_widget(checkbox, area.offset(Offset::new(0, 8)));
 	}
 }
+*/

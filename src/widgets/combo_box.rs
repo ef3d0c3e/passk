@@ -1,8 +1,5 @@
-use core::num;
 use std::cell::RefCell;
-use std::collections::BTreeSet;
 
-use color_eyre::owo_colors::colors::xterm::LightMineShaft;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyModifiers;
@@ -21,12 +18,12 @@ use ratatui::widgets::List;
 use ratatui::widgets::ListItem;
 use ratatui::widgets::ListState;
 use ratatui::widgets::Paragraph;
-use ratatui::Frame;
 use ratatui::widgets::Scrollbar;
 use ratatui::widgets::ScrollbarOrientation;
 use ratatui::widgets::ScrollbarState;
+use ratatui::Frame;
 
-pub struct CompletionItem {
+pub struct ComboItem {
 	kind: String,
 	icon: String,
 	value: String,
@@ -37,11 +34,11 @@ pub struct ComboBox<'s> {
 	layout: [Layout; 2],
 	completion_width: Layout,
 
-	entries: Vec<CompletionItem>,
+	entries: Vec<ComboItem>,
 	entries_filter: Vec<usize>,
 	input: String,
 	character_index: usize,
-	completion_index: i32,
+	entries_index: i32,
 	list_state: RefCell<ListState>,
 	scrollbar: RefCell<ScrollbarState>,
 
@@ -50,28 +47,7 @@ pub struct ComboBox<'s> {
 }
 
 impl<'s> ComboBox<'s> {
-	pub fn new(title: Line<'s>, horizontal: Constraint, entries: BTreeSet<String>) -> Self {
-		let mut entries = Vec::default();
-		entries.push(CompletionItem {
-			kind: "Text".into(),
-			icon: "󰅍 ".into(),
-			value: "Text".into(),
-		});
-		entries.push(CompletionItem {
-			kind: "2FA".into(),
-			icon: "󰐲 ".into(),
-			value: "TOTP/Steam".into(),
-		});
-		entries.push(CompletionItem {
-			kind: "2FA".into(),
-			icon: "󰐲 ".into(),
-			value: "TOTP/RFC 6238".into(),
-		});
-		entries.push(CompletionItem {
-			kind: "2FA".into(),
-			icon: "󰦯 ".into(),
-			value: "2FA Recovery".into(),
-		});
+	pub fn new(title: Line<'s>, horizontal: Constraint, entries: Vec<ComboItem>) -> Self {
 		let num_entries = entries.len();
 		Self {
 			title,
@@ -84,10 +60,9 @@ impl<'s> ComboBox<'s> {
 			entries_filter: (0..num_entries).collect(),
 			input: String::default(),
 			character_index: 0,
-			completion_index: -1,
+			entries_index: -1,
 			list_state: RefCell::default(),
-			scrollbar: RefCell::new(ScrollbarState::new(num_entries)
-				.position(0)),
+			scrollbar: RefCell::new(ScrollbarState::new(num_entries).position(0)),
 			active: false,
 			completion_menu: true,
 		}
@@ -120,7 +95,7 @@ impl<'s> ComboBox<'s> {
 	}
 
 	fn update_filer(&mut self) {
-		self.completion_index = -1;
+		self.entries_index = -1;
 		self.entries_filter.clear();
 		self.entries_filter.reserve(self.entries.len());
 		let filter_low = self.input.to_lowercase();
@@ -150,80 +125,110 @@ impl<'s> ComboBox<'s> {
 		match key.code {
 			// Completion menu
 			KeyCode::Down => {
-				self.completion_index = std::cmp::min(
-					self.completion_index + 1,
+				self.entries_index = std::cmp::min(
+					self.entries_index + 1,
 					self.entries_filter.len().saturating_sub(1) as i32,
 				);
 				if self.entries_filter.is_empty() {
-					self.completion_index = -1
+					self.entries_index = -1
 				} else {
-					self.list_state.borrow_mut().select(Some(self.completion_index as usize));
-					let sc = self.scrollbar.borrow_mut().position(self.completion_index as usize);
+					self.list_state
+						.borrow_mut()
+						.select(Some(self.entries_index as usize));
+					let sc = self
+						.scrollbar
+						.borrow_mut()
+						.position(self.entries_index as usize);
 					*self.scrollbar.borrow_mut() = sc
 				}
 			}
 			KeyCode::Char('n') if ctrl_pressed => {
-				self.completion_index = std::cmp::min(
-					self.completion_index + 1,
+				self.entries_index = std::cmp::min(
+					self.entries_index + 1,
 					self.entries_filter.len().saturating_sub(1) as i32,
 				);
 				if self.entries_filter.is_empty() {
-					self.completion_index = -1
+					self.entries_index = -1
 				} else {
-					self.list_state.borrow_mut().select(Some(self.completion_index as usize));
-					let sc = self.scrollbar.borrow_mut().position(self.completion_index as usize);
+					self.list_state
+						.borrow_mut()
+						.select(Some(self.entries_index as usize));
+					let sc = self
+						.scrollbar
+						.borrow_mut()
+						.position(self.entries_index as usize);
 					*self.scrollbar.borrow_mut() = sc
 				}
 			}
 			KeyCode::PageDown => {
-				self.completion_index = std::cmp::min(
-					self.completion_index + 16,
+				self.entries_index = std::cmp::min(
+					self.entries_index + 16,
 					self.entries_filter.len().saturating_sub(1) as i32,
 				);
 				if self.entries_filter.is_empty() {
-					self.completion_index = -1
+					self.entries_index = -1
 				} else {
-					self.list_state.borrow_mut().select(Some(self.completion_index as usize));
-					let sc = self.scrollbar.borrow_mut().position(self.completion_index as usize);
+					self.list_state
+						.borrow_mut()
+						.select(Some(self.entries_index as usize));
+					let sc = self
+						.scrollbar
+						.borrow_mut()
+						.position(self.entries_index as usize);
 					*self.scrollbar.borrow_mut() = sc
 				}
 			}
 			KeyCode::Up => {
-				self.completion_index = std::cmp::max(self.completion_index - 1, 0);
+				self.entries_index = std::cmp::max(self.entries_index - 1, 0);
 				if self.entries_filter.is_empty() {
-					self.completion_index = -1
+					self.entries_index = -1
 				} else {
-					self.list_state.borrow_mut().select(Some(self.completion_index as usize));
-					let sc = self.scrollbar.borrow_mut().position(self.completion_index as usize);
+					self.list_state
+						.borrow_mut()
+						.select(Some(self.entries_index as usize));
+					let sc = self
+						.scrollbar
+						.borrow_mut()
+						.position(self.entries_index as usize);
 					*self.scrollbar.borrow_mut() = sc
 				}
 			}
 			KeyCode::Char('p') if ctrl_pressed => {
-				self.completion_index = std::cmp::max(self.completion_index - 1, 0);
+				self.entries_index = std::cmp::max(self.entries_index - 1, 0);
 				if self.entries_filter.is_empty() {
-					self.completion_index = -1
+					self.entries_index = -1
 				} else {
-					self.list_state.borrow_mut().select(Some(self.completion_index as usize));
-					let sc = self.scrollbar.borrow_mut().position(self.completion_index as usize);
+					self.list_state
+						.borrow_mut()
+						.select(Some(self.entries_index as usize));
+					let sc = self
+						.scrollbar
+						.borrow_mut()
+						.position(self.entries_index as usize);
 					*self.scrollbar.borrow_mut() = sc
 				}
 			}
 			KeyCode::PageUp => {
-				self.completion_index = std::cmp::max(self.completion_index - 16, 0);
+				self.entries_index = std::cmp::max(self.entries_index - 16, 0);
 				if self.entries_filter.is_empty() {
-					self.completion_index = -1
+					self.entries_index = -1
 				} else {
-					self.list_state.borrow_mut().select(Some(self.completion_index as usize));
-					let sc = self.scrollbar.borrow_mut().position(self.completion_index as usize);
+					self.list_state
+						.borrow_mut()
+						.select(Some(self.entries_index as usize));
+					let sc = self
+						.scrollbar
+						.borrow_mut()
+						.position(self.entries_index as usize);
 					*self.scrollbar.borrow_mut() = sc
 				}
 			}
-			KeyCode::Enter | KeyCode::Tab if self.completion_index != -1 => {
-				self.input = self.entries[self.entries_filter[self.completion_index as usize]]
+			KeyCode::Enter | KeyCode::Tab if self.entries_index != -1 => {
+				self.input = self.entries[self.entries_filter[self.entries_index as usize]]
 					.value
 					.clone();
 				self.character_index = self.input.len();
-				self.completion_index = -1;
+				self.entries_index = -1;
 				self.completion_menu = false
 			}
 
@@ -308,52 +313,55 @@ impl<'s> ComboBox<'s> {
 				let text = Line::from(vec![
 					" ".bg(Color::Black),
 					ent.value
-					.as_str()
-					.bg(Color::Black)
-					.fg(if self.completion_index != -1
-						&& *id == self.entries_filter[self.completion_index as usize]
-					{
-						Color::Yellow
-					} else {
-						Color::White
-					})
-					.bold(),
+						.as_str()
+						.bg(Color::Black)
+						.fg(
+							if self.entries_index != -1
+								&& *id == self.entries_filter[self.entries_index as usize]
+							{
+								Color::Yellow
+							} else {
+								Color::White
+							},
+						)
+						.bold(),
 				]);
 
 				// Kind
 				let kind_span = Span::styled(
 					ent.kind.as_str(),
 					ratatui::style::Style::default()
-					.fg(Color::Gray)
-					.bg(Color::Black)
-					.italic(),
+						.fg(Color::Gray)
+						.bg(Color::Black)
+						.italic(),
 				);
 
 				// Padding
 				let padding = Span::styled(
 					" ",
-					ratatui::style::Style::default()
-					.bg(Color::Black)
-					.italic(),
+					ratatui::style::Style::default().bg(Color::Black).italic(),
 				);
 
 				let used_width = (icon.width() + text.width()) as u16;
 				let kind_width = kind_span.width() as u16;
-				let padding_width = (width - 2)
-					.saturating_sub(used_width + kind_width);
+				let padding_width = (width - 2).saturating_sub(used_width + kind_width);
 				let spacer = Span::styled(
 					" ".repeat(padding_width as usize),
 					ratatui::style::Style::default().bg(Color::Black),
 				);
 
-
-				let line = Line::from(vec![
-					icon.spans,
-					text.spans,
-					vec![spacer],
-					vec![kind_span],
-					vec![padding]
-				].into_iter().flatten().collect::<Vec<_>>());
+				let line = Line::from(
+					vec![
+						icon.spans,
+						text.spans,
+						vec![spacer],
+						vec![kind_span],
+						vec![padding],
+					]
+					.into_iter()
+					.flatten()
+					.collect::<Vec<_>>(),
+				);
 				ListItem::new(line)
 			})
 			.collect::<Vec<_>>();
@@ -367,8 +375,7 @@ impl<'s> ComboBox<'s> {
 			.track_symbol(Some(" "))
 			.track_style(Style::default().bg(Color::Black))
 			.thumb_symbol("█")
-			.thumb_style(Style::default().fg(Color::White))
-			;
+			.thumb_style(Style::default().fg(Color::White));
 		frame.render_stateful_widget(scrollbar, area_scrollbar, &mut self.scrollbar.borrow_mut());
 	}
 
