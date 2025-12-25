@@ -2,6 +2,8 @@ use std::cell::RefCell;
 
 use crate::data::field::Field;
 use crate::data::field::FieldValue;
+use crate::style::ENTRY_BG;
+use crate::style::HELP_LINE_BG;
 use crate::widgets::confirm::ConfirmDialog;
 use crate::widgets::field_editor::FieldEditor;
 use crate::Entry;
@@ -11,6 +13,7 @@ use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyModifiers;
 use ratatui::layout::Constraint;
+use ratatui::layout::Flex;
 use ratatui::layout::Layout;
 use ratatui::layout::Rect;
 use ratatui::style::Color;
@@ -83,7 +86,6 @@ impl EntryEditor {
 	}
 
 	pub fn input(&mut self, key: &KeyEvent) -> bool {
-		/*
 		// Field editor
 		if let Some(editor) = &mut self.editor {
 			if let Some(field) = editor.input(key) {
@@ -101,6 +103,7 @@ impl EntryEditor {
 		}
 
 		// Delete confirm box
+		/*
 		if let Some(confirm) = &mut self.confirm {
 			if let Some(val) = confirm.input(key) {
 				if val {
@@ -118,14 +121,14 @@ impl EntryEditor {
 		let shift_pressed = key.modifiers.contains(KeyModifiers::SHIFT);
 		match key.code {
 			// Reorder
-			KeyCode::Up if shift_pressed => {
+			KeyCode::Up | KeyCode::Char('k') if shift_pressed => {
 				if self.selected > 0 {
 					self.entry.fields.swap(self.selected as usize, self.selected as usize - 1);
 					self.move_cursor(-1);
 					self.modified = true;
 				}
 			}
-			KeyCode::Down if shift_pressed => {
+			KeyCode::Down | KeyCode::Char('j') if shift_pressed => {
 				if self.selected != -1 && self.selected + 1 != self.entry.fields.len() as i32 {
 					self.entry.fields.swap(self.selected as usize, self.selected as usize + 1);
 					self.move_cursor(1);
@@ -159,15 +162,15 @@ impl EntryEditor {
 				}
 			}
 
-			/*
 			KeyCode::Char('e') | KeyCode::Enter => {
 				if self.selected != -1 {
 					self.editor = Some(
 						FieldEditor::new(Line::from(self.entry.name.clone()))
-							.with_field(&self.entry.fields[self.selected as usize]),
+							//.with_field(&self.entry.fields[self.selected as usize]),
 					)
 				}
 			}
+			/*
 			KeyCode::Delete | KeyCode::Char('d') => {
 				if self.selected != -1 {
 					let title = Line::from(vec!["Confirm".into()]);
@@ -187,7 +190,7 @@ impl EntryEditor {
 				self.editor = Some(FieldEditor::new(Line::from("Add Field")));
 			}
 			*/
-			KeyCode::Esc if self.editor.is_none() => return true,
+			KeyCode::Esc | KeyCode::Char('q') => return true,
 			_ => {}
 		}
 		return false;
@@ -200,11 +203,6 @@ impl EntryEditor {
 		yanked: bool,
 		id: usize,
 	) -> ListItem {
-		let bg_cols = [
-			Color::from_u32(0x322b44),
-			Color::from_u32(0x241f31),
-			Color::from_u32(0x5d507f),
-		];
 		let sep = std::cmp::max((width as f32 * 0.3) as u16, 20);
 
 		let item = if let Some(field) = field {
@@ -249,33 +247,14 @@ impl EntryEditor {
 		};
 
 		if selected {
-			item.bg(bg_cols[2])
+			item.bg(ENTRY_BG[2])
 			//list.underlined()
 		} else {
-			item.bg(bg_cols[id % 2])
+			item.bg(ENTRY_BG[id % 2])
 		}
 	}
 
 	pub fn draw(&self, frame: &mut Frame, rect: Rect) {
-		//if let Some(editor) = &self.editor {
-		//	let title = format!(
-		//		"{} > {}",
-		//		self.entry.name,
-		//		if self.selected != -1 {
-		//			&self.entry.fields[self.selected as usize].name
-		//		} else {
-		//			"New Field"
-		//		}
-		//	);
-		//	let area = frame.area();
-		//	let vertical = Layout::vertical([Constraint::Length(10)]).flex(Flex::Center);
-		//	let horizontal = Layout::horizontal([Constraint::Percentage(40)]).flex(Flex::Center);
-		//	let [area] = area.layout(&vertical);
-		//	let [area] = area.layout(&horizontal);
-		//	editor.draw(frame, area);
-		//	return;
-		//}
-
 		let title = Line::from(
 			vec![
 			self.entry.name.as_str().fg(Color::Cyan).bold(),
@@ -298,7 +277,7 @@ impl EntryEditor {
 			"y".bold().fg(Color::Green),
 			" (yank)".into(),
 		])
-		.bg(Color::from_u32(0x1a60b5));
+		.bg(HELP_LINE_BG);
 
 		let vertical = Layout::vertical([Constraint::Length(1), Constraint::Percentage(100)]);
 		let [help_area, content_area] = vertical.areas(rect);
@@ -329,5 +308,24 @@ impl EntryEditor {
 		frame.render_widget(Clear, rect);
 		frame.render_widget(help, help_area);
 		frame.render_widget(messages, content_area);
+
+		// Field editor
+		if let Some(editor) = &self.editor {
+			let title = format!(
+				"{} > {}",
+				self.entry.name,
+				if self.selected != -1 {
+					&self.entry.fields[self.selected as usize].name
+				} else {
+					"New Field"
+				}
+			);
+			let area = frame.area();
+			let vertical = Layout::vertical([Constraint::Length(20)]).flex(Flex::Center);
+			let horizontal = Layout::horizontal([Constraint::Percentage(40)]).flex(Flex::Center);
+			let [area] = area.layout(&vertical);
+			let [area] = area.layout(&horizontal);
+			editor.draw(frame, area);
+		}
 	}
 }

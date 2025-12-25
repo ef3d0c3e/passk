@@ -24,17 +24,17 @@ use ratatui::widgets::ScrollbarState;
 use ratatui::Frame;
 
 pub struct ComboItem {
-	kind: String,
-	icon: String,
-	value: String,
+	pub kind: String,
+	pub icon: String,
+	pub value: String,
 }
 
-pub struct ComboBox<'s> {
+pub struct ComboBox<'s, 'e> {
 	title: Line<'s>,
 	layout: [Layout; 2],
 	completion_width: Layout,
 
-	entries: Vec<ComboItem>,
+	entries: &'e [ComboItem],
 	entries_filter: Vec<usize>,
 	input: String,
 	character_index: usize,
@@ -46,8 +46,8 @@ pub struct ComboBox<'s> {
 	completion_menu: bool,
 }
 
-impl<'s> ComboBox<'s> {
-	pub fn new(title: Line<'s>, horizontal: Constraint, entries: Vec<ComboItem>) -> Self {
+impl<'s, 'e> ComboBox<'s, 'e> {
+	pub fn new(title: Line<'s>, horizontal: Constraint, entries: &'e [ComboItem]) -> Self {
 		let num_entries = entries.len();
 		Self {
 			title,
@@ -82,16 +82,26 @@ impl<'s> ComboBox<'s> {
 		}
 	}
 
+	pub fn is_active(&self) -> bool {
+		self.active
+	}
+
+	pub fn is_completing(&self) -> bool {
+		self.completion_menu
+	}
+
 	pub fn set_input(&mut self, input: String) {
 		self.character_index = input.len();
 		self.input = input;
 	}
 
-	pub fn submit(&mut self) -> Option<String> {
-		let mut empty = String::default();
-		std::mem::swap(&mut self.input, &mut empty);
-		self.character_index = 0;
-		Some(empty)
+	pub fn submit(&mut self) -> Option<usize> {
+		for i in &self.entries_filter {
+			if self.entries[*i].value == self.input {
+				return Some(*i)
+			}
+		}
+		None
 	}
 
 	fn update_filer(&mut self) {
@@ -124,7 +134,7 @@ impl<'s> ComboBox<'s> {
 		let ctrl_pressed = key.modifiers.contains(KeyModifiers::CONTROL);
 		match key.code {
 			// Completion menu
-			KeyCode::Down => {
+			KeyCode::Down if self.completion_menu => {
 				self.entries_index = std::cmp::min(
 					self.entries_index + 1,
 					self.entries_filter.len().saturating_sub(1) as i32,
@@ -142,7 +152,7 @@ impl<'s> ComboBox<'s> {
 					*self.scrollbar.borrow_mut() = sc
 				}
 			}
-			KeyCode::Char('n') if ctrl_pressed => {
+			KeyCode::Char('n') if ctrl_pressed && self.completion_menu => {
 				self.entries_index = std::cmp::min(
 					self.entries_index + 1,
 					self.entries_filter.len().saturating_sub(1) as i32,
@@ -160,7 +170,7 @@ impl<'s> ComboBox<'s> {
 					*self.scrollbar.borrow_mut() = sc
 				}
 			}
-			KeyCode::PageDown => {
+			KeyCode::PageDown if self.completion_menu => {
 				self.entries_index = std::cmp::min(
 					self.entries_index + 16,
 					self.entries_filter.len().saturating_sub(1) as i32,
@@ -178,7 +188,7 @@ impl<'s> ComboBox<'s> {
 					*self.scrollbar.borrow_mut() = sc
 				}
 			}
-			KeyCode::Up => {
+			KeyCode::Up if self.completion_menu => {
 				self.entries_index = std::cmp::max(self.entries_index - 1, 0);
 				if self.entries_filter.is_empty() {
 					self.entries_index = -1
@@ -193,7 +203,7 @@ impl<'s> ComboBox<'s> {
 					*self.scrollbar.borrow_mut() = sc
 				}
 			}
-			KeyCode::Char('p') if ctrl_pressed => {
+			KeyCode::Char('p') if ctrl_pressed && self.completion_menu => {
 				self.entries_index = std::cmp::max(self.entries_index - 1, 0);
 				if self.entries_filter.is_empty() {
 					self.entries_index = -1
@@ -208,7 +218,7 @@ impl<'s> ComboBox<'s> {
 					*self.scrollbar.borrow_mut() = sc
 				}
 			}
-			KeyCode::PageUp => {
+			KeyCode::PageUp if self.completion_menu => {
 				self.entries_index = std::cmp::max(self.entries_index - 16, 0);
 				if self.entries_filter.is_empty() {
 					self.entries_index = -1
@@ -223,13 +233,17 @@ impl<'s> ComboBox<'s> {
 					*self.scrollbar.borrow_mut() = sc
 				}
 			}
-			KeyCode::Enter | KeyCode::Tab if self.entries_index != -1 => {
+
+			KeyCode::Esc => {
+				self.completion_menu = false
+			}
+			KeyCode::Enter | KeyCode::Tab if self.entries_index != -1 && self.completion_menu => {
 				self.input = self.entries[self.entries_filter[self.entries_index as usize]]
 					.value
 					.clone();
 				self.character_index = self.input.len();
 				self.entries_index = -1;
-				self.completion_menu = false
+				self.completion_menu = false;
 			}
 
 			KeyCode::Char(to_insert) => {

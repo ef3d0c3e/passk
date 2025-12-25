@@ -50,6 +50,7 @@ use crate::widgets::text_input::TextInput;
 
 pub mod data;
 pub mod widgets;
+pub mod style;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Entry {
@@ -85,7 +86,7 @@ pub static CLIPBOARD_CTX : LazyLock<ClipboardContext> = LazyLock::new(|| {
 });
 
 struct App {
-	search: ComboBox<'static>,
+	search: TextInput<'static>,
 	add_entry: TextInput<'static>,
 	active_widget: ActiveWidget,
 	entries: Vec<Entry>,
@@ -140,7 +141,7 @@ impl App {
 		];
 		let filtered = (0..entries.len()).collect::<Vec<_>>();
 		Self {
-			search: ComboBox::new(Line::from("Search"), Constraint::Percentage(100), vec![]),
+			search: TextInput::new(Line::from("Search"), Constraint::Percentage(100)),
 			add_entry: TextInput::new(Line::from("New Entry"), Constraint::Percentage(100)),
 			active_widget: ActiveWidget::default(),
 			entries,

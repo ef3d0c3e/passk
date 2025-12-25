@@ -1,5 +1,17 @@
+use std::any::Any;
+use std::cell::RefCell;
+use std::sync::LazyLock;
+use std::sync::OnceLock;
+
 use crate::data::field::Field;
+use crate::data::field::FieldValue;
+use crate::style::HELP_LINE_BG;
+use crate::widgets::combo_box::ComboBox;
+use crate::widgets::combo_box::ComboItem;
 use crate::widgets::text_input::TextInput;
+use crate::ActiveWidget;
+use color_eyre::owo_colors::styles::HiddenDisplay;
+use color_eyre::owo_colors::Style;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyModifiers;
@@ -12,10 +24,15 @@ use ratatui::layout::Offset;
 use ratatui::layout::Rect;
 use ratatui::style::Color;
 use ratatui::style::Stylize;
+use ratatui::symbols::border::QUADRANT_INSIDE;
+use ratatui::symbols::border::QUADRANT_OUTSIDE;
 use ratatui::text::Line;
 use ratatui::text::Text;
 use ratatui::widgets::Block;
+use ratatui::widgets::Clear;
+use ratatui::widgets::ListState;
 use ratatui::widgets::Paragraph;
+use ratatui::widgets::ScrollbarState;
 use ratatui::Frame;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -24,20 +41,281 @@ enum ActiveField {
 	#[default]
 	None,
 	Name,
-	Value,
+	Type,
 	Hidden,
+	Values(usize),
 }
 
-pub struct FieldEditor<'s> {
-	name: TextInput<'s>,
-	value: TextInput<'s>,
-	hidden: bool,
+static FIELD_TYPE: LazyLock<[ComboItem; 7]> = LazyLock::new(|| {
+	[
+		ComboItem {
+			kind: "Text".into(),
+			icon: "󰅍 ".into(),
+			value: "Text".into(),
+		},
+		ComboItem {
+			kind: "Text".into(),
+			icon: "󰇰 ".into(),
+			value: "E-Mail".into(),
+		},
+		ComboItem {
+			kind: "Text".into(),
+			icon: " ".into(),
+			value: "URL".into(),
+		},
+		ComboItem {
+			kind: "Text".into(),
+			icon: "󰥒 ".into(),
+			value: "Phone Number".into(),
+		},
+		ComboItem {
+			kind: "2FA".into(),
+			icon: "󰐲 ".into(),
+			value: "TOTP/Steam".into(),
+		},
+		ComboItem {
+			kind: "2FA".into(),
+			icon: "󰐲 ".into(),
+			value: "TOTP/RFC 6238".into(),
+		},
+		ComboItem {
+			kind: "2FA".into(),
+			icon: "󰦯 ".into(),
+			value: "2FA Recovery".into(),
+		},
+	]
+});
 
+pub struct FieldEditor<'s> {
 	title: Line<'s>,
-	layout: [Layout; 2],
 
 	active: ActiveField,
-	generator: Option<TextInput<'s>>,
+	name: TextInput<'s>,
+	hidden: bool,
+	value_type: ComboBox<'s, 'static>,
+	prev_value_type: i32,
+	value: Vec<TextInput<'s>>,
+	//generator: Option<TextInput<'s>>,
+	list_state: RefCell<ListState>,
+	scrollbar: RefCell<ScrollbarState>,
+}
+
+impl<'s> FieldEditor<'s> {
+	pub fn new(title: Line<'s>) -> Self {
+		Self {
+			title,
+			active: ActiveField::None,
+			name: TextInput::new(Line::from(vec!["Name".into()]), Constraint::Percentage(100)),
+			hidden: false,
+			value_type: ComboBox::new(
+				Line::from(vec!["Type".into()]),
+				Constraint::Percentage(100),
+				&*FIELD_TYPE,
+			),
+			prev_value_type: -1,
+			value: vec![],
+			list_state: RefCell::default(),
+			scrollbar: RefCell::new(ScrollbarState::new(0).position(0)),
+		}
+	}
+
+	fn set_value_type(&mut self, value_type: &Option<FieldValue>) {
+		let Some(value_type) = value_type else {
+			self.value.clear();
+			return;
+		};
+		match value_type {
+			FieldValue::Text(text) => {
+				self.value = vec![TextInput::new(
+					Line::from(vec!["Text".into()]),
+					Constraint::Percentage(100),
+				)
+				.with_input(text.to_owned())];
+			}
+			FieldValue::Url(url) => {
+				self.value = vec![TextInput::new(
+					Line::from(vec!["URL".into()]),
+					Constraint::Percentage(100),
+				)
+				.with_input(url.to_owned())];
+			}
+			FieldValue::Phone(phone) => {
+				self.value = vec![TextInput::new(
+					Line::from(vec!["Phone Number".into()]),
+					Constraint::Percentage(100),
+				)
+				.with_input(phone.to_owned())];
+			}
+			FieldValue::Email(email) => {
+				self.value = vec![TextInput::new(
+					Line::from(vec!["E-Mail".into()]),
+					Constraint::Percentage(100),
+				)
+				.with_input(email.to_owned())];
+			}
+			FieldValue::TOTPRFC6238(_) => todo!(),
+			FieldValue::TOTPSteam(_) => todo!(),
+			FieldValue::TwoFactorRecovery(two_facodes) => todo!(),
+			FieldValue::Binary { mimetype, base64 } => todo!(),
+		}
+	}
+
+	pub fn move_cursor(&mut self, offset: i32) {
+		match self.active {
+			ActiveField::None => {}
+			ActiveField::Name => self.name.set_active(false),
+			ActiveField::Type => self.value_type.set_active(false),
+			ActiveField::Hidden => {}
+			ActiveField::Values(i) => self.value[i].set_active(false),
+		}
+		if offset == 1 {
+			self.active = match self.active {
+				ActiveField::None => ActiveField::Name,
+				ActiveField::Name => ActiveField::Type,
+				ActiveField::Type => ActiveField::Hidden,
+				ActiveField::Hidden => {
+					if !self.value.is_empty() {
+						ActiveField::Values(0)
+					} else {
+						ActiveField::Hidden
+					}
+				}
+				ActiveField::Values(i) => {
+					if self.value.len() > i + 1 {
+						ActiveField::Values(i + 1)
+					} else {
+						ActiveField::Values(i)
+					}
+				}
+			};
+		} else if offset == -1 {
+			self.active = match self.active {
+				ActiveField::None => ActiveField::None,
+				ActiveField::Name => ActiveField::Name,
+				ActiveField::Type => ActiveField::Name,
+				ActiveField::Hidden => ActiveField::Type,
+				ActiveField::Values(i) => {
+					if i == 0 {
+						ActiveField::Hidden
+					} else {
+						ActiveField::Values(i - 1)
+					}
+				}
+			};
+		}
+		match self.active {
+			ActiveField::None => {}
+			ActiveField::Name => self.name.set_active(true),
+			ActiveField::Type => self.value_type.set_active(true),
+			ActiveField::Hidden => {}
+			ActiveField::Values(i) => {
+				self.value[i].set_active(true);
+			}
+		}
+	}
+
+	pub fn input(&mut self, key: &KeyEvent) -> Option<Option<Field>> {
+		match self.active {
+			ActiveField::None => {}
+			ActiveField::Name => self.name.input(key),
+			ActiveField::Type => {
+				self.value_type.input(key);
+				if self.value_type.is_completing() {
+					return None;
+				}
+				if let Some(idx) = self.value_type.submit() {
+					if idx as i32 != self.prev_value_type
+					{
+						self.prev_value_type = idx as i32;
+						match idx {
+							0 => self.set_value_type(&Some(FieldValue::Text(String::default()))),
+							1 => self.set_value_type(&Some(FieldValue::Email(String::default()))),
+							_ => {
+								self.set_value_type(&None);
+							}
+						}
+					}
+				}
+			}
+			ActiveField::Hidden => {
+				if key.code == KeyCode::Char(' ') {
+					self.hidden = !self.hidden;
+					return None;
+				}
+			}
+			ActiveField::Values(i) => self.value[i].input(key),
+		}
+
+		match key.code {
+			KeyCode::Up => {
+				self.move_cursor(-1);
+			}
+			KeyCode::Down => {
+				self.move_cursor(1);
+			}
+			KeyCode::Esc => return Some(None),
+			_ => {}
+		}
+		None
+	}
+
+	pub fn draw(&self, frame: &mut Frame, area: Rect) {
+		frame.render_widget(Clear, area);
+
+		let vertical = Layout::vertical([Constraint::Length(1), Constraint::Min(3)]);
+		let inner = Rect {
+			x: area.x + 1,
+			y: area.y + 1,
+			width: area.width - 2,
+			height: area.height - 2,
+		};
+		let [help_area, content_area] = vertical.areas(inner);
+
+		let help = Line::from(vec![
+			" ⮁".bold().fg(Color::Green),
+			" (navigate) ".into(),
+			"esc".bold().fg(Color::Green),
+			" (cancel) ".into(),
+			"enter".bold().fg(Color::Green),
+			" (submit) ".into(),
+			"space".bold().fg(Color::Green),
+			" (toggle) ".into(),
+			"C-g".bold().fg(Color::Green),
+			" (generate) ".into(),
+		]);
+		frame.render_widget(help, help_area);
+
+		let border = Block::bordered()
+			.border_set(QUADRANT_OUTSIDE)
+			.fg(Color::Black);
+		frame.render_widget(border, area);
+
+		// Name
+		self.name.draw(frame, content_area);
+		// Value type
+		self.value_type
+			.draw(frame, content_area.offset(Offset::new(0, 3)));
+		// Checkbox
+		let checkbox = Line::from(vec![
+			" ".into(),
+			["[ ]", "[x]"][self.hidden as usize].bold(),
+			" Hidden".into(),
+		]);
+		if self.active == ActiveField::Hidden {
+			frame.render_widget(
+				checkbox.fg(Color::Yellow),
+				content_area.offset(Offset::new(0, 6)),
+			);
+		} else {
+			frame.render_widget(checkbox, content_area.offset(Offset::new(0, 6)));
+		}
+
+		let mut yoff = 7;
+		for widget in &self.value {
+			widget.draw(frame, content_area.offset(Offset::new(0, yoff)));
+			yoff += 3;
+		}
+	}
 }
 
 /*
