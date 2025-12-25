@@ -6,11 +6,14 @@ use ratatui::layout::Position;
 use ratatui::layout::Rect;
 use ratatui::style::Color;
 use ratatui::style::Style;
+use ratatui::style::Stylize;
 use ratatui::text::Line;
 use ratatui::widgets::Block;
 use ratatui::widgets::Clear;
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
+
+use crate::widgets::widget::WidgetInfo;
 
 pub struct TextInput<'s> {
 	title: Line<'s>,
@@ -72,8 +75,8 @@ impl<'s> TextInput<'s> {
 		}
 	}
 
-	pub fn draw(&self, frame: &mut Frame, rect: Rect) {
-		let popup = Paragraph::new(self.input.as_str())
+	pub fn draw(&self, frame: &mut Frame, rect: Rect, bg: Option<Color>) {
+		let paragraph = Paragraph::new(self.input.as_str())
 			.style(if self.active {
 				Style::default().fg(Color::Yellow)
 			} else {
@@ -84,7 +87,12 @@ impl<'s> TextInput<'s> {
 		let [area] = area.layout(&self.layout[0]);
 		let [area] = area.layout(&self.layout[1]);
 		frame.render_widget(Clear, area);
-		frame.render_widget(popup, area);
+		if let Some(bg) = bg
+		{
+			frame.render_widget(paragraph.bg(bg), area);
+		} else {
+			frame.render_widget(paragraph, area);
+		}
 		if self.active {
 			frame.set_cursor_position(Position::new(
 				area.x + self.character_index as u16 + 1,
@@ -146,4 +154,10 @@ impl<'s> TextInput<'s> {
 	fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
 		new_cursor_pos.clamp(0, self.input.chars().count())
 	}
+}
+
+impl WidgetInfo for TextInput<'_> {
+    fn height(&self) -> u16 {
+        3
+    }
 }

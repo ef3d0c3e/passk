@@ -8,6 +8,7 @@ use crate::widgets::confirm::ConfirmDialog;
 use crate::widgets::field_editor::FieldEditor;
 use crate::Entry;
 
+use chrono::Utc;
 use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
@@ -89,11 +90,23 @@ impl EntryEditor {
 		// Field editor
 		if let Some(editor) = &mut self.editor {
 			if let Some(field) = editor.input(key) {
-				if let Some(field) = field {
+				if let Some((name, hidden, value)) = field {
 					if self.selected != -1 {
-						self.entry.fields[self.selected as usize] = field;
+						let field = &mut self.entry.fields[self.selected as usize];
+						field.name = name;
+						field.hidden = hidden;
+						field.value = value;
+						field.date_modified = Utc::now();
+						field.date_accessed = Utc::now();
 					} else {
-						self.entry.fields.push(field);
+						self.entry.fields.push(Field {
+							name,
+							value,
+							hidden,
+							date_added: Utc::now(),
+							date_modified: Utc::now(),
+							date_accessed: Utc::now(),
+						});
 					}
 				}
 				self.editor = None;
@@ -166,9 +179,13 @@ impl EntryEditor {
 				if self.selected != -1 {
 					self.editor = Some(
 						FieldEditor::new(Line::from(self.entry.name.clone()))
-							//.with_field(&self.entry.fields[self.selected as usize]),
+							.with_field(&self.entry.fields[self.selected as usize]),
 					)
 				}
+			}
+			KeyCode::Char('a') => {
+				self.selected = -1;
+				self.editor = Some(FieldEditor::new(Line::from("New Field")));
 			}
 			/*
 			KeyCode::Delete | KeyCode::Char('d') => {
@@ -184,10 +201,6 @@ impl EntryEditor {
 					]);
 					self.confirm = Some(ConfirmDialog::new(title, vec![ListItem::from(desc)]));
 				}
-			}
-			KeyCode::Char('a') => {
-				self.selected = -1;
-				self.editor = Some(FieldEditor::new(Line::from("Add Field")));
 			}
 			*/
 			KeyCode::Esc | KeyCode::Char('q') => return true,
@@ -272,6 +285,8 @@ impl EntryEditor {
 			" (reorder) ".into(),
 			"a".bold().fg(Color::Green),
 			" (add) ".into(),
+			"e".bold().fg(Color::Green),
+			" (edit) ".into(),
 			"d".bold().fg(Color::Green),
 			" (delete) ".into(),
 			"y".bold().fg(Color::Green),

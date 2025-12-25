@@ -288,11 +288,11 @@ impl App {
 			}
 
 			let popup_area = centered_area(frame.area(), 60, 3);
-			self.add_entry.draw(frame, popup_area);
+			self.add_entry.draw(frame, popup_area, None);
 		}
 
 		// Search
-		self.search.draw(frame, search_area);
+		self.search.draw(frame, search_area, None);
 
 		// Editor
 		if let Some(editor) = self.editor.as_ref() {

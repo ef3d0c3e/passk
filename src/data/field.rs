@@ -9,6 +9,7 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::CLIPBOARD_CTX;
+use crate::widgets::combo_box::ComboItem;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct TwoFACode {
@@ -55,6 +56,19 @@ impl FieldValue {
 		};
 		CLIPBOARD_CTX.set_text(content)
 			.unwrap();
+	}
+
+	pub fn get_id(&self) -> usize {
+		match self {
+			FieldValue::Text(_) => 0,
+			FieldValue::Url(_) => 1,
+			FieldValue::Phone(_) => 2,
+			FieldValue::Email(_) => 3,
+			FieldValue::TOTPRFC6238(_) => 4,
+			FieldValue::TOTPSteam(_) => 5,
+			FieldValue::TwoFactorRecovery(_) => 6,
+			FieldValue::Binary { mimetype, base64 } => todo!(),
+		}
 	}
 }
 

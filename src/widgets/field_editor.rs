@@ -32,6 +32,7 @@ use ratatui::widgets::Block;
 use ratatui::widgets::Clear;
 use ratatui::widgets::ListState;
 use ratatui::widgets::Paragraph;
+use ratatui::widgets::Scrollbar;
 use ratatui::widgets::ScrollbarState;
 use ratatui::Frame;
 
@@ -55,11 +56,6 @@ static FIELD_TYPE: LazyLock<[ComboItem; 7]> = LazyLock::new(|| {
 		},
 		ComboItem {
 			kind: "Text".into(),
-			icon: "󰇰 ".into(),
-			value: "E-Mail".into(),
-		},
-		ComboItem {
-			kind: "Text".into(),
 			icon: " ".into(),
 			value: "URL".into(),
 		},
@@ -67,6 +63,11 @@ static FIELD_TYPE: LazyLock<[ComboItem; 7]> = LazyLock::new(|| {
 			kind: "Text".into(),
 			icon: "󰥒 ".into(),
 			value: "Phone Number".into(),
+		},
+		ComboItem {
+			kind: "Text".into(),
+			icon: "󰇰 ".into(),
+			value: "E-Mail".into(),
 		},
 		ComboItem {
 			kind: "2FA".into(),
@@ -96,13 +97,12 @@ pub struct FieldEditor<'s> {
 	prev_value_type: i32,
 	value: Vec<TextInput<'s>>,
 	//generator: Option<TextInput<'s>>,
-	list_state: RefCell<ListState>,
 	scrollbar: RefCell<ScrollbarState>,
 }
 
 impl<'s> FieldEditor<'s> {
 	pub fn new(title: Line<'s>) -> Self {
-		Self {
+		let mut s = Self {
 			title,
 			active: ActiveField::None,
 			name: TextInput::new(Line::from(vec!["Name".into()]), Constraint::Percentage(100)),
@@ -114,16 +114,34 @@ impl<'s> FieldEditor<'s> {
 			),
 			prev_value_type: -1,
 			value: vec![],
-			list_state: RefCell::default(),
 			scrollbar: RefCell::new(ScrollbarState::new(0).position(0)),
-		}
+		};
+		s.update_scrollbar();
+		s
 	}
 
-	fn set_value_type(&mut self, value_type: &Option<FieldValue>) {
+	pub fn with_field(mut self, field: &Field) -> Self {
+		self.set_value_type(Some(&field.value));
+		self.hidden = field.hidden;
+		self.name.set_input(field.name.clone());
+		self.prev_value_type = field.value.get_id() as i32;
+		self.value_type
+			.set_input(FIELD_TYPE[field.value.get_id()].value.clone());
+		self
+	}
+
+	pub fn update_scrollbar(&mut self) {
+		let height = 1 + 3 * (2 + self.value.len());
+		*self.scrollbar.borrow_mut() = ScrollbarState::new(height);
+	}
+
+	fn set_value_type(&mut self, value_type: Option<&FieldValue>) {
 		let Some(value_type) = value_type else {
 			self.value.clear();
+			self.update_scrollbar();
 			return;
 		};
+
 		match value_type {
 			FieldValue::Text(text) => {
 				self.value = vec![TextInput::new(
@@ -151,13 +169,35 @@ impl<'s> FieldEditor<'s> {
 					Line::from(vec!["E-Mail".into()]),
 					Constraint::Percentage(100),
 				)
-				.with_input(email.to_owned())];
+				.with_input(email.to_owned()),
+				TextInput::new(
+					Line::from(vec!["Foo".into()]),
+					Constraint::Percentage(100),
+					),
+				TextInput::new(
+					Line::from(vec!["Bar".into()]),
+					Constraint::Percentage(100),
+					),
+				TextInput::new(
+					Line::from(vec!["Baz".into()]),
+					Constraint::Percentage(100),
+					),
+				TextInput::new(
+					Line::from(vec!["Quz".into()]),
+					Constraint::Percentage(100),
+					),
+				TextInput::new(
+					Line::from(vec!["Qux".into()]),
+					Constraint::Percentage(100),
+					)
+					];
 			}
 			FieldValue::TOTPRFC6238(_) => todo!(),
 			FieldValue::TOTPSteam(_) => todo!(),
 			FieldValue::TwoFactorRecovery(two_facodes) => todo!(),
 			FieldValue::Binary { mimetype, base64 } => todo!(),
 		}
+		self.update_scrollbar();
 	}
 
 	pub fn move_cursor(&mut self, offset: i32) {
@@ -214,7 +254,7 @@ impl<'s> FieldEditor<'s> {
 		}
 	}
 
-	pub fn input(&mut self, key: &KeyEvent) -> Option<Option<Field>> {
+	pub fn input(&mut self, key: &KeyEvent) -> Option<Option<(String, bool, FieldValue)>> {
 		match self.active {
 			ActiveField::None => {}
 			ActiveField::Name => self.name.input(key),
@@ -224,14 +264,15 @@ impl<'s> FieldEditor<'s> {
 					return None;
 				}
 				if let Some(idx) = self.value_type.submit() {
-					if idx as i32 != self.prev_value_type
-					{
+					if idx as i32 != self.prev_value_type {
 						self.prev_value_type = idx as i32;
 						match idx {
-							0 => self.set_value_type(&Some(FieldValue::Text(String::default()))),
-							1 => self.set_value_type(&Some(FieldValue::Email(String::default()))),
+							0 => self.set_value_type(Some(&FieldValue::Text(String::default()))),
+							1 => self.set_value_type(Some(&FieldValue::Url(String::default()))),
+							2 => self.set_value_type(Some(&FieldValue::Phone(String::default()))),
+							3 => self.set_value_type(Some(&FieldValue::Email(String::default()))),
 							_ => {
-								self.set_value_type(&None);
+								self.set_value_type(None);
 							}
 						}
 					}
@@ -246,12 +287,46 @@ impl<'s> FieldEditor<'s> {
 			ActiveField::Values(i) => self.value[i].input(key),
 		}
 
+		let ctrl_pressed = key.modifiers.contains(KeyModifiers::CONTROL);
 		match key.code {
-			KeyCode::Up => {
-				self.move_cursor(-1);
-			}
-			KeyCode::Down => {
-				self.move_cursor(1);
+			KeyCode::Up => self.move_cursor(-1),
+			KeyCode::Char('p') if ctrl_pressed => self.move_cursor(-1),
+			KeyCode::Down => self.move_cursor(1),
+			KeyCode::Char('n') if ctrl_pressed => self.move_cursor(1),
+
+			KeyCode::Enter => {
+				// TODO: Validate
+				match self.value_type.submit() {
+					Some(0) => {
+						return Some(Some((
+							self.name.submit(),
+							self.hidden,
+							FieldValue::Text(self.value[0].submit()),
+						)))
+					}
+					Some(1) => {
+						return Some(Some((
+							self.name.submit(),
+							self.hidden,
+							FieldValue::Url(self.value[0].submit()),
+						)))
+					}
+					Some(2) => {
+						return Some(Some((
+							self.name.submit(),
+							self.hidden,
+							FieldValue::Phone(self.value[0].submit()),
+						)))
+					}
+					Some(3) => {
+						return Some(Some((
+							self.name.submit(),
+							self.hidden,
+							FieldValue::Email(self.value[0].submit()),
+						)))
+					}
+					_ => return Some(None),
+				}
 			}
 			KeyCode::Esc => return Some(None),
 			_ => {}
@@ -291,10 +366,10 @@ impl<'s> FieldEditor<'s> {
 		frame.render_widget(border, area);
 
 		// Name
-		self.name.draw(frame, content_area);
+		self.name.draw(frame, content_area, Some(Color::Black));
 		// Value type
 		self.value_type
-			.draw(frame, content_area.offset(Offset::new(0, 3)));
+			.draw(frame, content_area.offset(Offset::new(0, 3)), Some(Color::Black));
 		// Checkbox
 		let checkbox = Line::from(vec![
 			" ".into(),
@@ -312,7 +387,7 @@ impl<'s> FieldEditor<'s> {
 
 		let mut yoff = 7;
 		for widget in &self.value {
-			widget.draw(frame, content_area.offset(Offset::new(0, yoff)));
+			widget.draw(frame, content_area.offset(Offset::new(0, yoff)), Some(Color::Black));
 			yoff += 3;
 		}
 	}

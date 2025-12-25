@@ -98,7 +98,7 @@ impl<'s, 'e> ComboBox<'s, 'e> {
 	pub fn submit(&mut self) -> Option<usize> {
 		for i in &self.entries_filter {
 			if self.entries[*i].value == self.input {
-				return Some(*i)
+				return Some(*i);
 			}
 		}
 		None
@@ -234,9 +234,7 @@ impl<'s, 'e> ComboBox<'s, 'e> {
 				}
 			}
 
-			KeyCode::Esc => {
-				self.completion_menu = false
-			}
+			KeyCode::Esc => self.completion_menu = false,
 			KeyCode::Enter | KeyCode::Tab if self.entries_index != -1 && self.completion_menu => {
 				self.input = self.entries[self.entries_filter[self.entries_index as usize]]
 					.value
@@ -260,8 +258,8 @@ impl<'s, 'e> ComboBox<'s, 'e> {
 		}
 	}
 
-	pub fn draw(&self, frame: &mut Frame, rect: Rect) {
-		let popup = Paragraph::new(self.input.as_str())
+	pub fn draw(&self, frame: &mut Frame, rect: Rect, bg: Option<Color>) {
+		let text_input = Paragraph::new(self.input.as_str())
 			.style(if self.active {
 				Style::default().fg(Color::Yellow)
 			} else {
@@ -271,8 +269,6 @@ impl<'s, 'e> ComboBox<'s, 'e> {
 		let area = rect;
 		let [area] = area.layout(&self.layout[0]);
 		let [area] = area.layout(&self.layout[1]);
-		frame.render_widget(Clear, area);
-		frame.render_widget(popup, area);
 		if self.active {
 			frame.set_cursor_position(Position::new(
 				area.x + self.character_index as u16 + 1,
@@ -288,7 +284,16 @@ impl<'s, 'e> ComboBox<'s, 'e> {
 			width: 2,
 			height: 1,
 		};
-		frame.render_widget(indicator, indicator_area);
+
+		// Draw
+		frame.render_widget(Clear, area);
+		if let Some(bg) = bg {
+			frame.render_widget(text_input.bg(bg), area);
+			frame.render_widget(indicator.bg(bg), indicator_area);
+		} else {
+			frame.render_widget(text_input, area);
+			frame.render_widget(indicator, indicator_area);
+		}
 
 		// Dropdown
 		if self.entries_filter.is_empty() || !self.active || !self.completion_menu {
