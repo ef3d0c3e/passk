@@ -7,6 +7,10 @@ use crate::style::HELP_LINE_BG;
 use crate::widgets::confirm::ConfirmDialog;
 use crate::widgets::field_editor::FieldEditor;
 use crate::Entry;
+use crate::widgets::widget::Component;
+use crate::widgets::widget::ComponentRenderCtx;
+use crate::widgets::widget::FormExt;
+use crate::widgets::widget::FormSignal;
 
 use chrono::Utc;
 use color_eyre::owo_colors::OwoColorize;
@@ -89,29 +93,33 @@ impl EntryEditor {
 	pub fn input(&mut self, key: &KeyEvent) -> bool {
 		// Field editor
 		if let Some(editor) = &mut self.editor {
-			if let Some(field) = editor.input(key) {
-				if let Some((name, hidden, value)) = field {
-					if self.selected != -1 {
-						let field = &mut self.entry.fields[self.selected as usize];
-						field.name = name;
-						field.hidden = hidden;
-						field.value = value;
-						field.date_modified = Utc::now();
-						field.date_accessed = Utc::now();
-					} else {
-						self.entry.fields.push(Field {
-							name,
-							value,
-							hidden,
-							date_added: Utc::now(),
-							date_modified: Utc::now(),
-							date_accessed: Utc::now(),
-						});
-					}
-				}
-				self.editor = None;
-				return false;
+			match <FieldEditor as FormExt>::input(editor, key) {
+				Some(FormSignal::Exit) => return true,
+				_ => {},
 			}
+			//if let Some(field) = editor.input(key) {
+			//	if let Some((name, hidden, value)) = field {
+			//		if self.selected != -1 {
+			//			let field = &mut self.entry.fields[self.selected as usize];
+			//			field.name = name;
+			//			field.hidden = hidden;
+			//			field.value = value;
+			//			field.date_modified = Utc::now();
+			//			field.date_accessed = Utc::now();
+			//		} else {
+			//			self.entry.fields.push(Field {
+			//				name,
+			//				value,
+			//				hidden,
+			//				date_added: Utc::now(),
+			//				date_modified: Utc::now(),
+			//				date_accessed: Utc::now(),
+			//			});
+			//		}
+			//	}
+			//	self.editor = None;
+			//	return false;
+			//}
 			return false;
 		}
 
@@ -178,8 +186,8 @@ impl EntryEditor {
 			KeyCode::Char('e') | KeyCode::Enter => {
 				if self.selected != -1 {
 					self.editor = Some(
-						FieldEditor::new(Line::from(self.entry.name.clone()))
-							.with_field(&self.entry.fields[self.selected as usize]),
+						FieldEditor::new(Line::from(self.entry.name.clone())),
+							//.with_field(&self.entry.fields[self.selected as usize]),
 					)
 				}
 			}
@@ -340,7 +348,11 @@ impl EntryEditor {
 			let horizontal = Layout::horizontal([Constraint::Percentage(40)]).flex(Flex::Center);
 			let [area] = area.layout(&vertical);
 			let [area] = area.layout(&horizontal);
-			editor.draw(frame, area);
+			let ctx = ComponentRenderCtx {
+				area,
+				selected: false,
+			};
+			editor.render(frame, &ctx);
 		}
 	}
 }

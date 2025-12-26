@@ -1,40 +1,18 @@
 use std::any::Any;
 use std::cell::RefCell;
 use std::sync::LazyLock;
-use std::sync::OnceLock;
 
-use crate::data::field::Field;
-use crate::data::field::FieldValue;
-use crate::style::HELP_LINE_BG;
-use crate::widgets::combo_box::ComboBox;
+use crate::widgets::checkbox::Checkbox;
 use crate::widgets::combo_box::ComboItem;
 use crate::widgets::text_input::TextInput;
-use crate::ActiveWidget;
-use color_eyre::owo_colors::styles::HiddenDisplay;
-use color_eyre::owo_colors::Style;
+use crate::widgets::widget::Component;
+use crate::widgets::widget::Form;
+use crate::widgets::widget::FormSignal;
 use crossterm::event::KeyCode;
-use crossterm::event::KeyEvent;
-use crossterm::event::KeyModifiers;
-use rand::distr::Alphanumeric;
-use rand::distr::SampleString;
-use ratatui::layout::Constraint;
-use ratatui::layout::Flex;
-use ratatui::layout::Layout;
-use ratatui::layout::Offset;
-use ratatui::layout::Rect;
-use ratatui::style::Color;
-use ratatui::style::Stylize;
-use ratatui::symbols::border::QUADRANT_INSIDE;
-use ratatui::symbols::border::QUADRANT_OUTSIDE;
 use ratatui::text::Line;
-use ratatui::text::Text;
-use ratatui::widgets::Block;
-use ratatui::widgets::Clear;
-use ratatui::widgets::ListState;
-use ratatui::widgets::Paragraph;
-use ratatui::widgets::Scrollbar;
-use ratatui::widgets::ScrollbarState;
-use ratatui::Frame;
+use ratatui::text::Span;
+
+use super::widget::FormEvent;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[repr(u8)]
@@ -87,6 +65,73 @@ static FIELD_TYPE: LazyLock<[ComboItem; 7]> = LazyLock::new(|| {
 	]
 });
 
+pub struct FieldEditor<'s> {
+	title: Line<'s>,
+
+	// Form data
+	components: Vec<Box<dyn Component>>,
+	selected: Option<usize>,
+	scroll: RefCell<u16>,
+}
+
+impl Form for FieldEditor<'_> {
+	type Return = bool;
+
+	fn components(&self) -> &[Box<dyn super::widget::Component>] {
+		self.components.as_slice()
+	}
+
+	fn components_mut(&mut self) -> &mut [Box<dyn super::widget::Component>] {
+		self.components.as_mut_slice()
+	}
+
+	fn selected(&self) -> Option<usize> {
+		self.selected
+	}
+
+	fn set_selected(&mut self, selected: Option<usize>) {
+		self.selected = selected;
+	}
+
+	fn scroll(&self) -> u16 {
+		*self.scroll.borrow()
+	}
+
+	fn set_scroll(&self, scroll: u16) {
+		*self.scroll.borrow_mut() = scroll;
+	}
+
+	fn event(&mut self, ev: FormEvent) -> Option<FormSignal<Self::Return>> {
+		match ev {
+			FormEvent::Key { key } => {
+				if key.code == KeyCode::Esc {
+					return Some(FormSignal::Exit);
+				} else if key.code == KeyCode::Enter {
+					return Some(FormSignal::Return(true));
+				}
+			}
+			_ => {}
+		}
+		None
+	}
+}
+
+impl<'s> FieldEditor<'s> {
+	pub fn new(title: Line<'s>) -> Self {
+		Self {
+			title,
+			components: vec![
+				Box::new(Checkbox::new(false, Span::from("First"))),
+				Box::new(TextInput::new()),
+				Box::new(Checkbox::new(false, Span::from("Test"))),
+			],
+			selected: None,
+			scroll: RefCell::default(),
+		}
+	}
+}
+
+/*
 pub struct FieldEditor<'s> {
 	title: Line<'s>,
 
@@ -392,6 +437,7 @@ impl<'s> FieldEditor<'s> {
 		}
 	}
 }
+*/
 
 /*
 /* Name   : [.....]

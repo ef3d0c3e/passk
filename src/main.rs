@@ -47,6 +47,7 @@ use crate::widgets::confirm::ConfirmDialog;
 use crate::widgets::entry_editor::EntryEditor;
 use crate::widgets::field_editor::FieldEditor;
 use crate::widgets::text_input::TextInput;
+use crate::widgets::widget::Component;
 
 pub mod data;
 pub mod widgets;
@@ -141,8 +142,8 @@ impl App {
 		];
 		let filtered = (0..entries.len()).collect::<Vec<_>>();
 		Self {
-			search: TextInput::new(Line::from("Search"), Constraint::Percentage(100)),
-			add_entry: TextInput::new(Line::from("New Entry"), Constraint::Percentage(100)),
+			search: TextInput::new(),
+			add_entry: TextInput::new(),
 			active_widget: ActiveWidget::default(),
 			entries,
 			filtered_entries: filtered,
@@ -153,15 +154,15 @@ impl App {
 
 	fn set_active(&mut self, active: ActiveWidget) {
 		match self.active_widget {
-			ActiveWidget::Search => self.search.set_active(false),
-			ActiveWidget::AddEntry => self.add_entry.set_active(false),
+			ActiveWidget::Search => {/*self.search.set_active(false)*/},
+			ActiveWidget::AddEntry => {/*self.add_entry.set_active(false)*/},
 			ActiveWidget::EntryEditor => self.editor = None,
 			_ => {}
 		}
 		self.active_widget = active;
 		match self.active_widget {
-			ActiveWidget::Search => self.search.set_active(true),
-			ActiveWidget::AddEntry => self.add_entry.set_active(true),
+			ActiveWidget::Search => {/*self.search.set_active(true)*/},
+			ActiveWidget::AddEntry => {/*self.add_entry.set_active(true)*/},
 			_ => {}
 		}
 	}
@@ -288,11 +289,11 @@ impl App {
 			}
 
 			let popup_area = centered_area(frame.area(), 60, 3);
-			self.add_entry.draw(frame, popup_area, None);
+			//self.add_entry.draw(frame, popup_area, None);
 		}
 
 		// Search
-		self.search.draw(frame, search_area, None);
+		//self.search.draw(frame, search_area, None);
 
 		// Editor
 		if let Some(editor) = self.editor.as_ref() {

@@ -1,16 +1,12 @@
 use std::sync::LazyLock;
 
-use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
-use ratatui::prelude::Buffer;
-use ratatui::prelude::Rect;
 use ratatui::style::Color;
 use ratatui::style::Style;
 use ratatui::style::Styled;
 use ratatui::text::Line;
 use ratatui::text::Span;
-use ratatui::widgets::Widget;
 use ratatui::Frame;
 
 use crate::widgets::widget::Component;
@@ -27,6 +23,8 @@ pub struct CheckboxStyle<'s> {
 	pub markers: [Span<'s>; 2],
 	/// Style override
 	pub style: Option<Style>,
+	/// Selected style override
+	pub selected_style: Option<Style>,
 }
 
 impl Default for CheckboxStyle<'_> {
@@ -36,6 +34,7 @@ impl Default for CheckboxStyle<'_> {
 			spacing: 1,
 			markers: ["[ ]".into(), "[x]".into()],
 			style: Default::default(),
+			selected_style: Default::default(),
 		}
 	}
 }
@@ -45,6 +44,13 @@ impl CheckboxStyle<'_> {
 		match self.style {
 			Some(style) => style.clone(),
 			None => Style::default(),
+		}
+	}
+
+	pub fn style_selected(&self) -> Style {
+		match self.selected_style {
+			Some(style) => style.clone(),
+			None => Style::default().fg(Color::Yellow),
 		}
 	}
 }
@@ -58,8 +64,8 @@ pub struct Checkbox<'s> {
 	label: Span<'s>,
 }
 
-impl Checkbox<'_> {
-	pub fn new(value: bool, label: Span) -> Self {
+impl<'s> Checkbox<'s> {
+	pub fn new(value: bool, label: Span<'s>) -> Self {
 		Self {
 			value,
 			style: &DEFAULT_STYLE,
@@ -67,7 +73,7 @@ impl Checkbox<'_> {
 		}
 	}
 
-	pub fn style(mut self, style: &CheckboxStyle) -> Self {
+	pub fn style(mut self, style: &'s CheckboxStyle<'s>) -> Self {
 		self.style = style;
 		self
 	}
@@ -89,25 +95,19 @@ impl Component for Checkbox<'_> {
 	}
 
 	fn render(&self, frame: &mut Frame, ctx: &ComponentRenderCtx) {
-		let padding_left = Span::styled(
-			" ".repeat(self.style.padding[0] as usize),
-			self.style.style(),
-		);
-		let padding_right = Span::styled(
-			" ".repeat(self.style.padding[1] as usize),
-			self.style.style(),
-		);
-		let spacing = Span::styled(" ".repeat(self.style.spacing as usize), self.style.style());
+		let padding_left = Span::raw(" ".repeat(self.style.padding[0] as usize));
+		let padding_right = Span::raw(" ".repeat(self.style.padding[1] as usize));
+		let spacing = Span::raw(" ".repeat(self.style.spacing as usize));
 
 		let marker = self.style.markers[self.value as usize].clone();
-		let marker = if let Some(style) = self.style.style.clone() {
-			marker.style(style)
-		} else {
-			marker
-		};
-
 		let label = self.label.clone();
-		let draw = Line::from(vec![padding_left, marker, spacing, label]);
+
+		let draw =
+			Line::from(vec![padding_left, marker, spacing, label]).set_style(if ctx.selected {
+				self.style.style_selected()
+			} else {
+				self.style.style()
+			});
 
 		let mut area = ctx.area;
 		area.width -= self.style.padding[1];
@@ -115,7 +115,15 @@ impl Component for Checkbox<'_> {
 		let mut area = ctx.area;
 		area.x += ctx.area.width - self.style.padding[1];
 		area.width = self.style.padding[1];
-		frame.render_widget(padding_right, area);
+		area.width = self.style.padding[1];
+		frame.render_widget(
+			padding_right.set_style(if ctx.selected {
+				self.style.style_selected()
+			} else {
+				self.style.style()
+			}),
+			area,
+		);
 	}
 
 	fn height(&self) -> u16 {

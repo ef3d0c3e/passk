@@ -1,41 +1,81 @@
+use std::sync::LazyLock;
+
+use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
+use crossterm::event::KeyModifiers;
 use ratatui::layout::Constraint;
 use ratatui::layout::Layout;
 use ratatui::layout::Position;
 use ratatui::layout::Rect;
 use ratatui::style::Color;
 use ratatui::style::Style;
+use ratatui::style::Styled;
 use ratatui::style::Stylize;
 use ratatui::text::Line;
+use ratatui::text::Span;
 use ratatui::widgets::Block;
 use ratatui::widgets::Clear;
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 
-use crate::widgets::widget::WidgetInfo;
+use crate::widgets::widget::Component;
+
+use super::widget::ComponentRenderCtx;
+
+#[derive(Debug, Clone)]
+pub struct TextInputStyle<'s> {
+	/// |<padding0><marker0>Input<marker1><padding1>|
+	pub padding: [u16; 2],
+	pub markers: [Span<'s>; 2],
+	/// Style override
+	pub style: Option<Style>,
+	/// Selected style override
+	pub selected_style: Option<Style>,
+}
+
+impl Default for TextInputStyle<'_> {
+	fn default() -> Self {
+		Self {
+			padding: Default::default(),
+			markers: ["[".into(), "]".into()],
+			style: Default::default(),
+			selected_style: Default::default(),
+		}
+	}
+}
+
+impl TextInputStyle<'_> {
+	pub fn style(&self) -> Style {
+		match self.style {
+			Some(style) => style.clone(),
+			None => Style::default(),
+		}
+	}
+
+	pub fn style_selected(&self) -> Style {
+		match self.selected_style {
+			Some(style) => style.clone(),
+			None => Style::default().fg(Color::Yellow),
+		}
+	}
+}
+
+static DEFAULT_STYLE: LazyLock<TextInputStyle> = LazyLock::new(|| TextInputStyle::default());
 
 pub struct TextInput<'s> {
-	title: Line<'s>,
-	layout: [Layout; 2],
-
 	input: String,
 	character_index: usize,
 
-	active: bool,
+	style: &'s TextInputStyle<'s>,
 }
 
 impl<'s> TextInput<'s> {
-	pub fn new(title: Line<'s>, horizontal: Constraint) -> Self {
+	pub fn new() -> Self {
 		Self {
-			title,
-			layout: [
-				Layout::horizontal([horizontal]),
-				Layout::vertical([Constraint::Length(3)]),
-			],
 			input: String::default(),
 			character_index: 0,
-			active: false,
+			style: &DEFAULT_STYLE,
 		}
 	}
 
@@ -44,10 +84,6 @@ impl<'s> TextInput<'s> {
 		self.input = input;
 		self.character_index = len;
 		self
-	}
-
-	pub fn set_active(&mut self, active: bool) {
-		self.active = active
 	}
 
 	pub fn set_input(&mut self, input: String) {
@@ -60,45 +96,6 @@ impl<'s> TextInput<'s> {
 		std::mem::swap(&mut self.input, &mut empty);
 		self.character_index = 0;
 		empty
-	}
-
-	pub fn input(&mut self, key: &KeyEvent) {
-		if !self.active {
-			return;
-		}
-		match key.code {
-			KeyCode::Char(to_insert) => self.enter_char(to_insert),
-			KeyCode::Backspace => self.delete_char(),
-			KeyCode::Left => self.move_cursor_left(),
-			KeyCode::Right => self.move_cursor_right(),
-			_ => {}
-		}
-	}
-
-	pub fn draw(&self, frame: &mut Frame, rect: Rect, bg: Option<Color>) {
-		let paragraph = Paragraph::new(self.input.as_str())
-			.style(if self.active {
-				Style::default().fg(Color::Yellow)
-			} else {
-				Style::default()
-			})
-			.block(Block::bordered().title(self.title.clone()));
-		let area = rect;
-		let [area] = area.layout(&self.layout[0]);
-		let [area] = area.layout(&self.layout[1]);
-		frame.render_widget(Clear, area);
-		if let Some(bg) = bg
-		{
-			frame.render_widget(paragraph.bg(bg), area);
-		} else {
-			frame.render_widget(paragraph, area);
-		}
-		if self.active {
-			frame.set_cursor_position(Position::new(
-				area.x + self.character_index as u16 + 1,
-				area.y + 1,
-			))
-		}
 	}
 
 	fn move_cursor_left(&mut self) {
@@ -156,8 +153,74 @@ impl<'s> TextInput<'s> {
 	}
 }
 
-impl WidgetInfo for TextInput<'_> {
-    fn height(&self) -> u16 {
-        3
-    }
+impl Component for TextInput<'_> {
+	fn input(&mut self, key: &KeyEvent) {
+		let ctrl_pressed = key.modifiers.contains(KeyModifiers::CONTROL);
+		match key.code {
+			KeyCode::Backspace => self.delete_char(),
+			// Movement
+			KeyCode::Left => self.move_cursor_left(),
+			KeyCode::Char('b') if ctrl_pressed => self.move_cursor_left(),
+			KeyCode::Right => self.move_cursor_right(),
+			KeyCode::Char('f') if ctrl_pressed => self.move_cursor_right(),
+			KeyCode::Char('a') if ctrl_pressed => self.character_index = 0,
+			KeyCode::Char('e') if ctrl_pressed => self.character_index = self.input.len(),
+			// TODO: Ctrl-arrow and kill-word
+			KeyCode::Char(to_insert) => self.enter_char(to_insert),
+			_ => {}
+		}
+	}
+
+	fn render(&self, frame: &mut Frame, ctx: &ComponentRenderCtx) {
+		let padding_left = Span::raw(" ".repeat(self.style.padding[0] as usize));
+		let padding_right = Span::raw(" ".repeat(self.style.padding[1] as usize));
+		let input_span = Span::from(self.input.as_str());
+		let empty_space = ctx.area.width
+			- self.style.padding[0]
+			- self.style.padding[1]
+			- self.style.markers[0].width() as u16
+			- self.style.markers[1].width() as u16
+			- input_span.width() as u16;
+		let spacer = Span::raw(" ".repeat(empty_space as usize));
+
+		let draw = Line::from(vec![
+			padding_left,
+			self.style.markers[0].clone(),
+			input_span,
+			spacer,
+			self.style.markers[1].clone(),
+		])
+		.set_style(if ctx.selected {
+			self.style.style_selected()
+		} else {
+			self.style.style()
+		});
+
+		let mut area = ctx.area;
+		area.width -= self.style.padding[1];
+		frame.render_widget(draw, area);
+
+		let mut area = ctx.area;
+		area.x += ctx.area.width - self.style.padding[1];
+		area.width = self.style.padding[1];
+		frame.render_widget(
+			padding_right.set_style(if ctx.selected {
+				self.style.style_selected()
+			} else {
+				self.style.style()
+			}),
+			area,
+		);
+
+		if ctx.selected {
+			frame.set_cursor_position(Position::new(
+				ctx.area.x + self.character_index as u16 + self.style.markers[0].width() as u16,
+				ctx.area.y,
+			))
+		}
+	}
+
+	fn height(&self) -> u16 {
+		1
+	}
 }
