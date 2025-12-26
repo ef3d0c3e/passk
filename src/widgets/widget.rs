@@ -17,8 +17,8 @@ pub trait Component {
 }
 
 pub struct ComponentRenderCtx {
-	area: Rect,
-	selected: bool,
+	pub area: Rect,
+	pub selected: bool,
 }
 
 pub trait Form {
