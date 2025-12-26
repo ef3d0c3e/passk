@@ -18,6 +18,9 @@ use ratatui::widgets::Block;
 use ratatui::widgets::Clear;
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthChar;
+use unicode_width::UnicodeWidthStr;
 
 use crate::widgets::widget::Component;
 
@@ -65,7 +68,9 @@ static DEFAULT_STYLE: LazyLock<TextInputStyle> = LazyLock::new(|| TextInputStyle
 
 pub struct TextInput<'s> {
 	input: String,
-	character_index: usize,
+	grapheme_count: usize,
+	grapheme_index: usize,
+	cursor_x: u16,
 
 	style: &'s TextInputStyle<'s>,
 }
@@ -74,82 +79,92 @@ impl<'s> TextInput<'s> {
 	pub fn new() -> Self {
 		Self {
 			input: String::default(),
-			character_index: 0,
+			grapheme_count: 0,
+			grapheme_index: 0,
+			cursor_x: 0,
 			style: &DEFAULT_STYLE,
 		}
 	}
 
 	pub fn with_input(mut self, input: String) -> Self {
-		let len = input.len();
+		self.grapheme_count = input.graphemes(true).count();
+		self.grapheme_index = self.grapheme_count;
 		self.input = input;
-		self.character_index = len;
+		self.cursor_x = self.cursor_x();
 		self
 	}
 
 	pub fn set_input(&mut self, input: String) {
-		self.character_index = input.len();
+		self.grapheme_count = input.graphemes(true).count();
+		self.grapheme_index = self.grapheme_count;
 		self.input = input;
+		self.cursor_x = self.cursor_x();
 	}
 
 	pub fn submit(&mut self) -> String {
 		let mut empty = String::default();
 		std::mem::swap(&mut self.input, &mut empty);
-		self.character_index = 0;
+		self.grapheme_index = 0;
+		self.grapheme_count = 0;
+		self.cursor_x = 0;
 		empty
 	}
 
 	fn move_cursor_left(&mut self) {
-		let cursor_moved_left = self.character_index.saturating_sub(1);
-		self.character_index = self.clamp_cursor(cursor_moved_left);
+		self.grapheme_index = self.grapheme_index.saturating_sub(1);
+		self.cursor_x = self.cursor_x();
 	}
 
 	fn move_cursor_right(&mut self) {
-		let cursor_moved_right = self.character_index.saturating_add(1);
-		self.character_index = self.clamp_cursor(cursor_moved_right);
+		self.grapheme_index = std::cmp::min(self.grapheme_index + 1, self.grapheme_count);
+		self.cursor_x = self.cursor_x();
 	}
 
 	fn enter_char(&mut self, new_char: char) {
-		let index = self.byte_index();
+		let index: usize = self
+			.input
+			.graphemes(true)
+			.take(self.grapheme_index)
+			.map(|g| g.len())
+			.sum();
 		self.input.insert(index, new_char);
-		self.move_cursor_right();
-	}
-
-	/// Returns the byte index based on the character position.
-	///
-	/// Since each character in a string can be contain multiple bytes, it's necessary to calculate
-	/// the byte index based on the index of the character.
-	fn byte_index(&self) -> usize {
-		self.input
-			.char_indices()
-			.map(|(i, _)| i)
-			.nth(self.character_index)
-			.unwrap_or(self.input.len())
-	}
-
-	fn delete_char(&mut self) {
-		let is_not_cursor_leftmost = self.character_index != 0;
-		if is_not_cursor_leftmost {
-			// Method "remove" is not used on the saved text for deleting the selected char.
-			// Reason: Using remove on String works on bytes instead of the chars.
-			// Using remove would require special care because of char boundaries.
-
-			let current_index = self.character_index;
-			let from_left_to_current_index = current_index - 1;
-
-			// Getting all characters before the selected character.
-			let before_char_to_delete = self.input.chars().take(from_left_to_current_index);
-			// Getting all characters after selected character.
-			let after_char_to_delete = self.input.chars().skip(current_index);
-
-			// Put all characters together except the selected one.
-			// By leaving the selected one out, it is forgotten and therefore deleted.
-			self.input = before_char_to_delete.chain(after_char_to_delete).collect();
-			self.move_cursor_left();
+		let prev_count = self.grapheme_count;
+		self.grapheme_count = self.input.graphemes(true).count();
+		self.cursor_x = self.cursor_x();
+		if prev_count != self.grapheme_count {
+			self.move_cursor_right()
 		}
 	}
 
-	fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
-		new_cursor_pos.clamp(0, self.input.chars().count())
+	fn delete_char(&mut self) {
+		if self.grapheme_index == 0 {
+			return;
+		}
+
+		let start: usize = self
+			.input
+			.graphemes(true)
+			.take(self.grapheme_index - 1)
+			.map(|g| g.len())
+			.sum();
+		let end: usize = self
+			.input
+			.graphemes(true)
+			.take(self.grapheme_index)
+			.map(|g| g.len())
+			.sum();
+
+		self.input.replace_range(start..end, "");
+		self.grapheme_count -= 1;
+		self.move_cursor_left();
+	}
+
+	fn cursor_x(&self) -> u16 {
+		self.input
+			.graphemes(true)
+			.take(self.grapheme_index)
+			.map(|g| UnicodeWidthStr::width(g).max(1))
+			.sum::<usize>() as u16
 	}
 }
 
@@ -163,8 +178,8 @@ impl Component for TextInput<'_> {
 			KeyCode::Char('b') if ctrl_pressed => self.move_cursor_left(),
 			KeyCode::Right => self.move_cursor_right(),
 			KeyCode::Char('f') if ctrl_pressed => self.move_cursor_right(),
-			KeyCode::Char('a') if ctrl_pressed => self.character_index = 0,
-			KeyCode::Char('e') if ctrl_pressed => self.character_index = self.input.len(),
+			KeyCode::Char('a') if ctrl_pressed => self.grapheme_index = 0,
+			KeyCode::Char('e') if ctrl_pressed => self.grapheme_index = self.input.len(),
 			// TODO: Ctrl-arrow and kill-word
 			KeyCode::Char(to_insert) => self.enter_char(to_insert),
 			_ => {}
@@ -175,12 +190,17 @@ impl Component for TextInput<'_> {
 		let padding_left = Span::raw(" ".repeat(self.style.padding[0] as usize));
 		let padding_right = Span::raw(" ".repeat(self.style.padding[1] as usize));
 		let input_span = Span::from(self.input.as_str());
-		let empty_space = ctx.area.width
-			- self.style.padding[0]
-			- self.style.padding[1]
-			- self.style.markers[0].width() as u16
-			- self.style.markers[1].width() as u16
-			- input_span.width() as u16;
+		let spw = self.input.graphemes(true)
+			.map(|g| UnicodeWidthStr::width(g).max(1))
+			.sum::<usize>();
+		let empty_space = ctx
+			.area
+			.width
+			.saturating_sub(self.style.padding[0])
+			.saturating_sub(self.style.padding[1])
+			.saturating_sub(self.style.markers[0].width() as u16)
+			.saturating_sub(self.style.markers[1].width() as u16)
+			.saturating_sub(spw as u16);
 		let spacer = Span::raw(" ".repeat(empty_space as usize));
 
 		let draw = Line::from(vec![
@@ -189,6 +209,7 @@ impl Component for TextInput<'_> {
 			input_span,
 			spacer,
 			self.style.markers[1].clone(),
+			padding_right
 		])
 		.set_style(if ctx.selected {
 			self.style.style_selected()
@@ -200,21 +221,9 @@ impl Component for TextInput<'_> {
 		area.width -= self.style.padding[1];
 		frame.render_widget(draw, area);
 
-		let mut area = ctx.area;
-		area.x += ctx.area.width - self.style.padding[1];
-		area.width = self.style.padding[1];
-		frame.render_widget(
-			padding_right.set_style(if ctx.selected {
-				self.style.style_selected()
-			} else {
-				self.style.style()
-			}),
-			area,
-		);
-
 		if ctx.selected {
 			frame.set_cursor_position(Position::new(
-				ctx.area.x + self.character_index as u16 + self.style.markers[0].width() as u16,
+				ctx.area.x + self.cursor_x + self.style.markers[0].width() as u16,
 				ctx.area.y,
 			))
 		}
