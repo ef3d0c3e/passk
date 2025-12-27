@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::cell::RefCell;
 use std::sync::LazyLock;
 
@@ -9,7 +8,9 @@ use crate::widgets::text_input::TextInput;
 use crate::widgets::widget::Component;
 use crate::widgets::widget::Form;
 use crate::widgets::widget::FormSignal;
+use crate::widgets::widget::FormStyle;
 use crossterm::event::KeyCode;
+use ratatui::style::Color;
 use ratatui::text::Line;
 use ratatui::text::Span;
 
@@ -68,6 +69,7 @@ static FIELD_TYPE: LazyLock<[ComboItem; 7]> = LazyLock::new(|| {
 
 pub struct FieldEditor<'s> {
 	title: Line<'s>,
+	style: FormStyle,
 
 	// Form data
 	components: Vec<Box<dyn Component>>,
@@ -84,6 +86,10 @@ impl Form for FieldEditor<'_> {
 
 	fn components_mut(&mut self) -> &mut [Box<dyn super::widget::Component>] {
 		self.components.as_mut_slice()
+	}
+
+	fn get_style(&self) -> &FormStyle {
+	    &self.style
 	}
 
 	fn selected(&self) -> Option<usize> {
@@ -121,6 +127,7 @@ impl<'s> FieldEditor<'s> {
 	pub fn new(title: Line<'s>) -> Self {
 		Self {
 			title,
+			style: FormStyle { bg: Color::Red },
 			components: vec![
 				Box::new(Checkbox::new(false, Span::from("First"))),
 				Box::new(TextInput::new()),

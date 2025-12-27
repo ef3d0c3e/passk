@@ -1,17 +1,16 @@
-use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
-use crossterm::event::MediaKeyCode;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::widgets::Clear;
+use ratatui::style::Color;
+use ratatui::style::Style;
 use ratatui::widgets::Scrollbar;
 use ratatui::widgets::ScrollbarState;
 use ratatui::Frame;
 
 pub trait Component {
 	/// Send inputs to the component
-	fn input(&mut self, key: &KeyEvent);
+	fn input(&mut self, key: &KeyEvent) -> bool;
 	/// Render the component
 	fn render(&self, frame: &mut Frame, ctx: &mut ComponentRenderCtx);
 	/// Widget height, for vertical layouts
@@ -63,6 +62,10 @@ pub enum FormSignal<T> {
 	Return(T),
 }
 
+pub struct FormStyle {
+	pub bg: Color,
+}
+
 pub trait Form {
 	type Return;
 
@@ -71,6 +74,8 @@ pub trait Form {
 
 	fn selected(&self) -> Option<usize>;
 	fn set_selected(&mut self, selected: Option<usize>);
+
+	fn get_style(&self) -> &FormStyle;
 
 	fn scroll(&self) -> u16;
 	fn set_scroll(&self, scroll: u16);
@@ -132,9 +137,12 @@ pub trait FormExt: Form {
 
 	fn input(&mut self, key: &KeyEvent) -> Option<FormSignal<<Self as Form>::Return>> {
 		if let Some(selected) = self.selected() {
-			self.components_mut()[selected].input(key);
+			let eaten = self.components_mut()[selected].input(key);
 			if let Some(signal) = self.event(FormEvent::Edit { id: selected, key }) {
 				return Some(signal);
+			}
+			if eaten {
+				return None
 			}
 		}
 
@@ -164,8 +172,9 @@ pub trait FormExt: Form {
 impl<T: Form + ?Sized> FormExt for T {}
 
 impl<T: FormExt + ?Sized> Component for T {
-	fn input(&mut self, key: &KeyEvent) {
+	fn input(&mut self, key: &KeyEvent) -> bool {
 		let _ = FormExt::input(self, key);
+		false
 	}
 
 	fn render(&self, frame: &mut Frame, ctx: &mut ComponentRenderCtx) {
@@ -176,7 +185,14 @@ impl<T: FormExt + ?Sized> Component for T {
 			width: ctx.area.width.saturating_sub(2), // -2 for scrollbar
 			height: ctx.area.height,
 		};
-		frame.render_widget(Clear, ctx.area);
+
+		// Fill with default color
+		let bg = Style::default().bg(self.get_style().bg);
+		for y in ctx.area.top()..ctx.area.bottom() {
+			for x in ctx.area.left()..ctx.area.right() {
+				frame.buffer_mut()[(x, y)].set_symbol(" ").set_style(bg);
+			}
+		}
 
 		self.ensure_visible(inner_area.height);
 		let mut queue = vec![];

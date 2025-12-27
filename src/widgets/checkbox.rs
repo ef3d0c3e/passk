@@ -88,10 +88,12 @@ impl<'s> Checkbox<'s> {
 }
 
 impl Component for Checkbox<'_> {
-	fn input(&mut self, key: &KeyEvent) {
+	fn input(&mut self, key: &KeyEvent) -> bool {
 		if key.code == KeyCode::Char(' ') {
 			self.toggle();
+			return true;
 		}
+		false
 	}
 
 	fn render(&self, frame: &mut Frame, ctx: &mut ComponentRenderCtx) {

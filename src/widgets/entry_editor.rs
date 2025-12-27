@@ -12,8 +12,6 @@ use crate::widgets::widget::ComponentRenderCtx;
 use crate::widgets::widget::FormExt;
 use crate::widgets::widget::FormSignal;
 
-use chrono::Utc;
-use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyModifiers;

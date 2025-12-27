@@ -1,25 +1,16 @@
 use std::sync::LazyLock;
 
-use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyModifiers;
-use ratatui::layout::Constraint;
-use ratatui::layout::Layout;
 use ratatui::layout::Position;
-use ratatui::layout::Rect;
 use ratatui::style::Color;
 use ratatui::style::Style;
 use ratatui::style::Styled;
-use ratatui::style::Stylize;
 use ratatui::text::Line;
 use ratatui::text::Span;
-use ratatui::widgets::Block;
-use ratatui::widgets::Clear;
-use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthChar;
 use unicode_width::UnicodeWidthStr;
 
 use crate::widgets::widget::Component;
@@ -84,6 +75,11 @@ impl<'s> TextInput<'s> {
 			cursor_x: 0,
 			style: &DEFAULT_STYLE,
 		}
+	}
+
+	pub fn style(mut self, style: &'s TextInputStyle) -> Self {
+		self.style = style;
+		self
 	}
 
 	pub fn with_input(mut self, input: String) -> Self {
@@ -169,7 +165,7 @@ impl<'s> TextInput<'s> {
 }
 
 impl Component for TextInput<'_> {
-	fn input(&mut self, key: &KeyEvent) {
+	fn input(&mut self, key: &KeyEvent) -> bool {
 		let ctrl_pressed = key.modifiers.contains(KeyModifiers::CONTROL);
 		match key.code {
 			KeyCode::Backspace => self.delete_char(),
@@ -182,8 +178,9 @@ impl Component for TextInput<'_> {
 			KeyCode::Char('e') if ctrl_pressed => self.grapheme_index = self.input.len(),
 			// TODO: Ctrl-arrow and kill-word
 			KeyCode::Char(to_insert) => self.enter_char(to_insert),
-			_ => {}
+			_ => { return false }
 		}
+		true
 	}
 
 	fn render(&self, frame: &mut Frame, ctx: &mut ComponentRenderCtx) {
