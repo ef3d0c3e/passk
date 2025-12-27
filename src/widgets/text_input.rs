@@ -42,21 +42,18 @@ impl Default for TextInputStyle<'_> {
 
 impl TextInputStyle<'_> {
 	pub fn style(&self) -> Style {
-		match self.style {
-			Some(style) => style.clone(),
-			None => Style::default(),
-		}
+		self.style.unwrap_or_default()
 	}
 
 	pub fn style_selected(&self) -> Style {
 		match self.selected_style {
-			Some(style) => style.clone(),
+			Some(style) => style,
 			None => Style::default().fg(Color::Yellow),
 		}
 	}
 }
 
-static DEFAULT_STYLE: LazyLock<TextInputStyle> = LazyLock::new(|| TextInputStyle::default());
+static DEFAULT_STYLE: LazyLock<TextInputStyle> = LazyLock::new(TextInputStyle::default);
 
 pub struct TextInput<'s> {
 	input: String,
@@ -65,6 +62,12 @@ pub struct TextInput<'s> {
 	cursor_x: u16,
 
 	style: &'s TextInputStyle<'s>,
+}
+
+impl<'s> Default for TextInput<'s> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<'s> TextInput<'s> {

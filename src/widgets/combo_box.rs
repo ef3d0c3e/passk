@@ -75,21 +75,18 @@ impl Default for ComboBoxStyle<'_> {
 
 impl ComboBoxStyle<'_> {
 	pub fn style(&self) -> Style {
-		match self.style {
-			Some(style) => style.clone(),
-			None => Style::default(),
-		}
+		self.style.unwrap_or_default()
 	}
 
 	pub fn style_selected(&self) -> Style {
 		match self.selected_style {
-			Some(style) => style.clone(),
+			Some(style) => style,
 			None => Style::default().fg(Color::Yellow),
 		}
 	}
 }
 
-static DEFAULT_STYLE: LazyLock<ComboBoxStyle> = LazyLock::new(|| ComboBoxStyle::default());
+static DEFAULT_STYLE: LazyLock<ComboBoxStyle> = LazyLock::new(ComboBoxStyle::default);
 
 pub struct ComboBox<'s, 'e> {
 	style: &'s ComboBoxStyle<'s>,
@@ -274,7 +271,7 @@ impl<'s, 'e> ComboBox<'s, 'e> {
 			.entries_filter
 			.iter()
 			.map(|id| &self.entries[*id])
-			.fold(false, |r, item| r || item.value == self.input);
+			.any(|item| item.value == self.input);
 		if found {
 			self.completion_menu = false;
 		}

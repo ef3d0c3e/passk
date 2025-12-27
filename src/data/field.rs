@@ -1,15 +1,11 @@
-use std::borrow::Cow;
 
 use chrono::DateTime;
 use chrono::Utc;
 use clipboard_rs::Clipboard;
-use clipboard_rs::ClipboardContext;
-use clipboard_rs::ClipboardContextX11Options;
 use serde::Deserialize;
 use serde::Serialize;
 
 use crate::CLIPBOARD_CTX;
-use crate::widgets::combo_box::ComboItem;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct TwoFACode {
@@ -51,8 +47,8 @@ impl FieldValue {
 			| FieldValue::Email(text) => text.clone(),
 			FieldValue::TOTPRFC6238(_) => todo!(),
 			FieldValue::TOTPSteam(_) => todo!(),
-			FieldValue::TwoFactorRecovery(two_facodes) => todo!(),
-			FieldValue::Binary { mimetype, base64 } => todo!(),
+			FieldValue::TwoFactorRecovery(_two_facodes) => todo!(),
+			FieldValue::Binary { mimetype: _, base64: _ } => todo!(),
 		};
 		CLIPBOARD_CTX.set_text(content)
 			.unwrap();
@@ -67,7 +63,7 @@ impl FieldValue {
 			FieldValue::TOTPRFC6238(_) => 4,
 			FieldValue::TOTPSteam(_) => 5,
 			FieldValue::TwoFactorRecovery(_) => 6,
-			FieldValue::Binary { mimetype, base64 } => todo!(),
+			FieldValue::Binary { mimetype: _, base64: _ } => todo!(),
 		}
 	}
 }
@@ -93,8 +89,8 @@ impl Default for Field {
 			name: Default::default(),
 			value: Default::default(),
 			hidden: Default::default(),
-			date_added: now.clone(),
-			date_modified: now.clone(),
+			date_added: now,
+			date_modified: now,
 			date_accessed: now,
 		}
 	}

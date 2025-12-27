@@ -39,7 +39,7 @@ pub struct EntryEditor {
 	/// ID of copied field (-1 for none)
 	copied: i32,
 	/// Editor for fields
-	editor: Option<FieldEditor<'static>>,
+	editor: Option<FieldEditor>,
 	/// Confirm dialog
 	confirm: Option<ConfirmDialog<'static>>,
 	/// Set to true if modified
@@ -91,10 +91,7 @@ impl EntryEditor {
 	pub fn input(&mut self, key: &KeyEvent) -> bool {
 		// Field editor
 		if let Some(editor) = &mut self.editor {
-			match <FieldEditor as FormExt>::input(editor, key) {
-				Some(FormSignal::Exit) => return true,
-				_ => {},
-			}
+			if let Some(FormSignal::Exit) = <FieldEditor as FormExt>::input(editor, key) { return true }
 			//if let Some(field) = editor.input(key) {
 			//	if let Some((name, hidden, value)) = field {
 			//		if self.selected != -1 {
@@ -184,14 +181,14 @@ impl EntryEditor {
 			KeyCode::Char('e') | KeyCode::Enter => {
 				if self.selected != -1 {
 					self.editor = Some(
-						FieldEditor::new(Line::from(self.entry.name.clone())),
+						FieldEditor::new()
 							//.with_field(&self.entry.fields[self.selected as usize]),
 					)
 				}
 			}
 			KeyCode::Char('a') => {
 				self.selected = -1;
-				self.editor = Some(FieldEditor::new(Line::from("New Field")));
+				self.editor = Some(FieldEditor::new());
 			}
 			/*
 			KeyCode::Delete | KeyCode::Char('d') => {
@@ -212,7 +209,7 @@ impl EntryEditor {
 			KeyCode::Esc | KeyCode::Char('q') => return true,
 			_ => {}
 		}
-		return false;
+		false
 	}
 
 	fn field_preview(
@@ -221,11 +218,11 @@ impl EntryEditor {
 		selected: bool,
 		yanked: bool,
 		id: usize,
-	) -> ListItem {
+	) -> ListItem<'_> {
 		let sep = std::cmp::max((width as f32 * 0.3) as u16, 20);
 
 		let item = if let Some(field) = field {
-			let name = Span::from(field.name.as_str().bold());
+			let name = field.name.as_str().bold();
 
 			let value: Span = if field.hidden {
 				"*****".fg(Color::Red)
@@ -237,8 +234,8 @@ impl EntryEditor {
 					FieldValue::Email(s) => s.as_str().underlined().fg(Color::Green), // TODO HYPERLINK
 					FieldValue::TOTPRFC6238(_) => todo!(),
 					FieldValue::TOTPSteam(_) => todo!(),
-					FieldValue::TwoFactorRecovery(two_facodes) => todo!(),
-					FieldValue::Binary { mimetype, base64 } => todo!(),
+					FieldValue::TwoFactorRecovery(_two_facodes) => todo!(),
+					FieldValue::Binary { mimetype: _, base64: _ } => todo!(),
 				}
 			};
 			let modifiers = if yanked {
@@ -332,7 +329,7 @@ impl EntryEditor {
 
 		// Field editor
 		if let Some(editor) = &self.editor {
-			let title = format!(
+			let _title = format!(
 				"{} > {}",
 				self.entry.name,
 				if self.selected != -1 {

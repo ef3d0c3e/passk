@@ -212,7 +212,7 @@ impl App {
 		}
 	}
 
-	fn format_entry(ent: &Entry, selected: bool) -> Line {
+	fn format_entry(ent: &Entry, selected: bool) -> Line<'_> {
 		let fg = if selected { Color::Black } else { Color::White };
 		let bg = if selected {
 			Color::White
@@ -232,7 +232,7 @@ impl App {
 			Constraint::Length(3),
 			Constraint::Min(1),
 		]);
-		let [help_area, search_area, content_area] = vertical.areas(frame.area());
+		let [help_area, _search_area, content_area] = vertical.areas(frame.area());
 
 		// Help
 		let text = Text::from(Line::from(vec![
@@ -272,7 +272,7 @@ impl App {
 				area
 			}
 
-			let popup_area = centered_area(frame.area(), 60, 3);
+			let _popup_area = centered_area(frame.area(), 60, 3);
 			//self.add_entry.draw(frame, popup_area, None);
 		}
 

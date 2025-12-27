@@ -13,6 +13,7 @@ use crate::widgets::widget::ComponentVisitor;
 use super::widget::ComponentRenderCtx;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Default)]
 pub enum LabelDisplay<'s> {
 	/// [Label][spacing][Widget]
 	Inline {
@@ -20,18 +21,14 @@ pub enum LabelDisplay<'s> {
 	},
 	/// [Label]
 	/// [Widget]
-	Newline,
+	#[default]
+ Newline,
 
 	Block {
 		block: Block<'s>,
 	},
 }
 
-impl Default for LabelDisplay<'_> {
-	fn default() -> Self {
-		Self::Newline
-	}
-}
 
 #[derive(Debug, Clone, Default)]
 pub struct LabelStyle<'s> {
@@ -43,21 +40,18 @@ pub struct LabelStyle<'s> {
 
 impl LabelStyle<'_> {
 	pub fn style(&self) -> Style {
-		match self.style {
-			Some(style) => style.clone(),
-			None => Style::default(),
-		}
+		self.style.unwrap_or_default()
 	}
 
 	pub fn style_selected(&self) -> Style {
 		match self.style_selected {
-			Some(style) => style.clone(),
+			Some(style) => style,
 			None => Style::default().fg(Color::Yellow),
 		}
 	}
 }
 
-static DEFAULT_STYLE: LazyLock<LabelStyle> = LazyLock::new(|| LabelStyle::default());
+static DEFAULT_STYLE: LazyLock<LabelStyle> = LazyLock::new(LabelStyle::default);
 
 pub struct Labeled<'s, T>
 where

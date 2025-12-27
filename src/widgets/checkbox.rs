@@ -42,21 +42,18 @@ impl Default for CheckboxStyle<'_> {
 
 impl CheckboxStyle<'_> {
 	pub fn style(&self) -> Style {
-		match self.style {
-			Some(style) => style.clone(),
-			None => Style::default(),
-		}
+		self.style.unwrap_or_default()
 	}
 
 	pub fn style_selected(&self) -> Style {
 		match self.selected_style {
-			Some(style) => style.clone(),
+			Some(style) => style,
 			None => Style::default().fg(Color::Yellow),
 		}
 	}
 }
 
-static DEFAULT_STYLE: LazyLock<CheckboxStyle> = LazyLock::new(|| CheckboxStyle::default());
+static DEFAULT_STYLE: LazyLock<CheckboxStyle> = LazyLock::new(CheckboxStyle::default);
 
 pub struct Checkbox<'s> {
 	value: bool,

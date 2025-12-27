@@ -19,7 +19,6 @@ use crate::widgets::widget::ComponentVisitor;
 use crossterm::event::KeyCode;
 use ratatui::style::Color;
 use ratatui::style::Style;
-use ratatui::text::Line;
 use ratatui::text::Span;
 use ratatui::widgets::Block;
 
@@ -63,8 +62,7 @@ static FIELD_TYPE: LazyLock<[ComboItem; 7]> = LazyLock::new(|| {
 	]
 });
 
-pub struct FieldEditor<'s> {
-	title: Line<'s>,
+pub struct FieldEditor {
 	style: FormStyle,
 
 	// Form data
@@ -84,7 +82,7 @@ impl ComponentVisitor for ValueTypeVisitor {
 	}
 }
 
-impl Form for FieldEditor<'_> {
+impl Form for FieldEditor {
 	type Return = bool;
 
 	fn components(&self) -> &[Box<dyn Component>] {
@@ -124,7 +122,7 @@ impl Form for FieldEditor<'_> {
 					return Some(FormSignal::Return(true));
 				}
 			}
-			FormEvent::Edit { id, key: _ } if id == 2 => {
+			FormEvent::Edit { id: 2, key: _ } => {
 				let mut visitor = ValueTypeVisitor::default();
 				self.accept(&mut visitor);
 				self.components.truncate(3);
@@ -160,8 +158,7 @@ impl Form for FieldEditor<'_> {
 						)),
 						_ => {}
 					}
-				} else {
-				}
+				} 
 			}
 			_ => {}
 		}
@@ -201,10 +198,15 @@ static COMBOBOX_STYLE: LazyLock<ComboBoxStyle> = LazyLock::new(|| ComboBoxStyle 
 	selected_style: Default::default(),
 });
 
-impl<'s> FieldEditor<'s> {
-	pub fn new(title: Line<'s>) -> Self {
+impl Default for FieldEditor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl FieldEditor {
+	pub fn new() -> Self {
 		Self {
-			title,
 			style: FormStyle {
 				bg: Color::from_u32(0x2f2f2f),
 			},
