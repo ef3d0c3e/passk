@@ -28,7 +28,7 @@ use serde::Serialize;
 
 use crate::data::field::Field;
 use crate::data::field::FieldValue;
-use crate::widgets::entry_editor::EntryEditor;
+use crate::ui::entry_editor::EntryEditor;
 use crate::widgets::text_input::TextInput;
 use crate::widgets::widget::Component;
 

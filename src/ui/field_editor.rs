@@ -87,11 +87,11 @@ impl ComponentVisitor for ValueTypeVisitor {
 impl Form for FieldEditor<'_> {
 	type Return = bool;
 
-	fn components(&self) -> &[Box<dyn super::widget::Component>] {
+	fn components(&self) -> &[Box<dyn Component>] {
 		self.components.as_slice()
 	}
 
-	fn components_mut(&mut self) -> &mut [Box<dyn super::widget::Component>] {
+	fn components_mut(&mut self) -> &mut [Box<dyn Component>] {
 		self.components.as_mut_slice()
 	}
 
