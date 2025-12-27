@@ -10,6 +10,7 @@ use ratatui::text::Span;
 use ratatui::Frame;
 
 use crate::widgets::widget::Component;
+use crate::widgets::widget::ComponentVisitor;
 
 use super::widget::ComponentRenderCtx;
 
@@ -130,5 +131,9 @@ impl Component for Checkbox<'_> {
 
 	fn height(&self) -> u16 {
 		1
+	}
+
+	fn accept(&self, visitor: &mut dyn ComponentVisitor) {
+		visitor.visit_checkbox(self);
 	}
 }

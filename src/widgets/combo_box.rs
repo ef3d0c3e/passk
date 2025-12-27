@@ -24,6 +24,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
 use crate::widgets::widget::Component;
+use crate::widgets::widget::ComponentVisitor;
 use crate::widgets::widget::Overlay;
 
 use super::widget::ComponentRenderCtx;
@@ -151,6 +152,15 @@ impl<'s, 'e> ComboBox<'s, 'e> {
 		self.input = input;
 		self.cursor_x = self.cursor_x();
 		self.update_filter();
+	}
+
+	pub fn submit(&self) -> Option<usize> {
+		for ent_id in &self.entries_filter {
+			if self.entries[*ent_id].value == self.input {
+				return Some(*ent_id);
+			}
+		}
+		None
 	}
 
 	fn move_cursor_left(&mut self) {
@@ -492,5 +502,9 @@ impl Component for ComboBox<'_, '_> {
 
 	fn height(&self) -> u16 {
 		1
+	}
+
+	fn accept(&self, visitor: &mut dyn ComponentVisitor) {
+		visitor.visit_combo_box(self);
 	}
 }

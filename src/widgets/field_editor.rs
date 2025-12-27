@@ -5,23 +5,23 @@ use crate::widgets::checkbox::Checkbox;
 use crate::widgets::combo_box::ComboBox;
 use crate::widgets::combo_box::ComboBoxStyle;
 use crate::widgets::combo_box::ComboItem;
+use crate::widgets::form::Form;
+use crate::widgets::form::FormEvent;
+use crate::widgets::form::FormSignal;
+use crate::widgets::form::FormStyle;
 use crate::widgets::label::LabelDisplay;
 use crate::widgets::label::LabelStyle;
 use crate::widgets::label::Labeled;
 use crate::widgets::text_input::TextInput;
 use crate::widgets::text_input::TextInputStyle;
 use crate::widgets::widget::Component;
-use crate::widgets::widget::Form;
-use crate::widgets::widget::FormSignal;
-use crate::widgets::widget::FormStyle;
+use crate::widgets::widget::ComponentVisitor;
 use crossterm::event::KeyCode;
 use ratatui::style::Color;
 use ratatui::style::Style;
 use ratatui::text::Line;
 use ratatui::text::Span;
 use ratatui::widgets::Block;
-
-use super::widget::FormEvent;
 
 static FIELD_TYPE: LazyLock<[ComboItem; 7]> = LazyLock::new(|| {
 	[
@@ -73,6 +73,17 @@ pub struct FieldEditor<'s> {
 	scroll: RefCell<u16>,
 }
 
+#[derive(Default)]
+struct ValueTypeVisitor {
+	value_type: Option<usize>,
+}
+
+impl ComponentVisitor for ValueTypeVisitor {
+	fn visit_combo_box(&mut self, combo_box: &ComboBox) {
+		self.value_type = combo_box.submit();
+	}
+}
+
 impl Form for FieldEditor<'_> {
 	type Return = bool;
 
@@ -111,6 +122,45 @@ impl Form for FieldEditor<'_> {
 					return Some(FormSignal::Exit);
 				} else if key.code == KeyCode::Enter {
 					return Some(FormSignal::Return(true));
+				}
+			}
+			FormEvent::Edit { id, key: _ } if id == 2 => {
+				let mut visitor = ValueTypeVisitor::default();
+				self.accept(&mut visitor);
+				self.components.truncate(3);
+				if let Some(index) = visitor.value_type {
+					match index {
+						0 => self.components.push(Box::new(
+							Labeled::new(
+								Span::from("Text"),
+								TextInput::new().style(&TEXTINPUT_STYLE),
+							)
+							.style(&LABEL_STYLE),
+						)),
+						1 => self.components.push(Box::new(
+							Labeled::new(
+								Span::from("URL"),
+								TextInput::new().style(&TEXTINPUT_STYLE),
+							)
+							.style(&LABEL_STYLE),
+						)),
+						2 => self.components.push(Box::new(
+							Labeled::new(
+								Span::from("Phone Number"),
+								TextInput::new().style(&TEXTINPUT_STYLE),
+							)
+							.style(&LABEL_STYLE),
+						)),
+						3 => self.components.push(Box::new(
+							Labeled::new(
+								Span::from("E-Mail"),
+								TextInput::new().style(&TEXTINPUT_STYLE),
+							)
+							.style(&LABEL_STYLE),
+						)),
+						_ => {}
+					}
+				} else {
 				}
 			}
 			_ => {}
@@ -155,7 +205,9 @@ impl<'s> FieldEditor<'s> {
 	pub fn new(title: Line<'s>) -> Self {
 		Self {
 			title,
-			style: FormStyle { bg: Color::Black },
+			style: FormStyle {
+				bg: Color::from_u32(0x2f2f2f),
+			},
 			components: vec![
 				Box::new(
 					Labeled::new(Span::from("Name"), TextInput::new().style(&TEXTINPUT_STYLE))
@@ -163,7 +215,10 @@ impl<'s> FieldEditor<'s> {
 				),
 				Box::new(Checkbox::new(false, Span::from("Hidden"))),
 				Box::new(
-					Labeled::new(Span::from("Type"), ComboBox::new(FIELD_TYPE.as_slice()).style(&COMBOBOX_STYLE))
+					Labeled::new(
+						Span::from("Type"),
+						ComboBox::new(FIELD_TYPE.as_slice()).style(&COMBOBOX_STYLE),
+					)
 					.style(&LABEL_STYLE),
 				),
 			],

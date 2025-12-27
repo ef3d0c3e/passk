@@ -14,6 +14,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
 use crate::widgets::widget::Component;
+use crate::widgets::widget::ComponentVisitor;
 
 use super::widget::ComponentRenderCtx;
 
@@ -178,7 +179,7 @@ impl Component for TextInput<'_> {
 			KeyCode::Char('e') if ctrl_pressed => self.grapheme_index = self.input.len(),
 			// TODO: Ctrl-arrow and kill-word
 			KeyCode::Char(to_insert) => self.enter_char(to_insert),
-			_ => { return false }
+			_ => return false,
 		}
 		true
 	}
@@ -232,5 +233,9 @@ impl Component for TextInput<'_> {
 
 	fn height(&self) -> u16 {
 		1
+	}
+
+	fn accept(&self, visitor: &mut dyn ComponentVisitor) {
+		visitor.visit_text_input(self);
 	}
 }

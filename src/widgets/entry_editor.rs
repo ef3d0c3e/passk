@@ -7,10 +7,10 @@ use crate::style::HELP_LINE_BG;
 use crate::widgets::confirm::ConfirmDialog;
 use crate::widgets::field_editor::FieldEditor;
 use crate::Entry;
+use crate::widgets::form::FormExt;
+use crate::widgets::form::FormSignal;
 use crate::widgets::widget::Component;
 use crate::widgets::widget::ComponentRenderCtx;
-use crate::widgets::widget::FormExt;
-use crate::widgets::widget::FormSignal;
 
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;

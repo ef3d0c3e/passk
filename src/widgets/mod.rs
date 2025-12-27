@@ -6,3 +6,4 @@ pub mod entry_editor;
 pub mod widget;
 pub mod checkbox;
 pub mod label;
+pub mod form;

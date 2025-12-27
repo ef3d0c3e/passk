@@ -8,6 +8,7 @@ use ratatui::widgets::Block;
 use ratatui::Frame;
 
 use crate::widgets::widget::Component;
+use crate::widgets::widget::ComponentVisitor;
 
 use super::widget::ComponentRenderCtx;
 
@@ -144,10 +145,14 @@ where
 	}
 
 	fn height(&self) -> u16 {
-		match self.style.display {
-			LabelDisplay::Inline { spacing: _ } => 1,
-			LabelDisplay::Newline => 2,
-			LabelDisplay::Block { block: _ } => 3,
+		 self.inner.height() + match self.style.display {
+			LabelDisplay::Inline { spacing: _ } => 0,
+			LabelDisplay::Newline => 1,
+			LabelDisplay::Block { block: _ } => 2,
 		}
+	}
+	
+	fn accept(&self, visitor: &mut dyn ComponentVisitor) {
+		self.inner.accept(visitor);
 	}
 }

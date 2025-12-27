@@ -34,6 +34,7 @@ use crate::widgets::widget::Component;
 
 pub mod data;
 pub mod widgets;
+pub mod ui;
 pub mod style;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
