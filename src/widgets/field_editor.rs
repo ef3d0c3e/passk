@@ -3,29 +3,25 @@ use std::sync::LazyLock;
 
 use crate::widgets::checkbox::Checkbox;
 use crate::widgets::combo_box::ComboBox;
+use crate::widgets::combo_box::ComboBoxStyle;
 use crate::widgets::combo_box::ComboItem;
+use crate::widgets::label::LabelDisplay;
+use crate::widgets::label::LabelStyle;
+use crate::widgets::label::Labeled;
 use crate::widgets::text_input::TextInput;
+use crate::widgets::text_input::TextInputStyle;
 use crate::widgets::widget::Component;
 use crate::widgets::widget::Form;
 use crate::widgets::widget::FormSignal;
 use crate::widgets::widget::FormStyle;
 use crossterm::event::KeyCode;
 use ratatui::style::Color;
+use ratatui::style::Style;
 use ratatui::text::Line;
 use ratatui::text::Span;
+use ratatui::widgets::Block;
 
 use super::widget::FormEvent;
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-#[repr(u8)]
-enum ActiveField {
-	#[default]
-	None,
-	Name,
-	Type,
-	Hidden,
-	Values(usize),
-}
 
 static FIELD_TYPE: LazyLock<[ComboItem; 7]> = LazyLock::new(|| {
 	[
@@ -89,7 +85,7 @@ impl Form for FieldEditor<'_> {
 	}
 
 	fn get_style(&self) -> &FormStyle {
-	    &self.style
+		&self.style
 	}
 
 	fn selected(&self) -> Option<usize> {
@@ -123,16 +119,53 @@ impl Form for FieldEditor<'_> {
 	}
 }
 
+static LABEL_STYLE: LazyLock<LabelStyle> = LazyLock::new(|| LabelStyle {
+	padding: [0, 0],
+	display: LabelDisplay::Block {
+		block: Block::bordered(),
+	},
+	style: None,
+	style_selected: None,
+});
+static TEXTINPUT_STYLE: LazyLock<TextInputStyle> = LazyLock::new(|| TextInputStyle {
+	padding: [0, 0],
+	markers: ["".into(), "".into()],
+	style: None,
+	selected_style: None,
+});
+static COMBOBOX_STYLE: LazyLock<ComboBoxStyle> = LazyLock::new(|| ComboBoxStyle {
+	padding: Default::default(),
+	markers: ["".into(), "".into()],
+	indicator: [" ".into(), " ".into()],
+	completion: [
+		Style::default().bg(Color::Cyan).fg(Color::Black),
+		Style::default().bg(Color::Black).fg(Color::White).bold(),
+		Style::default().bg(Color::Black).fg(Color::White).italic(),
+	],
+	completion_selected: [
+		Style::default().bg(Color::Cyan).fg(Color::Black),
+		Style::default().bg(Color::Black).fg(Color::Yellow).bold(),
+		Style::default().bg(Color::Black).fg(Color::Yellow).italic(),
+	],
+	style: Default::default(),
+	selected_style: Default::default(),
+});
+
 impl<'s> FieldEditor<'s> {
 	pub fn new(title: Line<'s>) -> Self {
 		Self {
 			title,
-			style: FormStyle { bg: Color::Red },
+			style: FormStyle { bg: Color::Black },
 			components: vec![
-				Box::new(Checkbox::new(false, Span::from("First"))),
-				Box::new(TextInput::new()),
-				Box::new(ComboBox::new(FIELD_TYPE.as_slice())),
-				Box::new(Checkbox::new(false, Span::from("Test"))),
+				Box::new(
+					Labeled::new(Span::from("Name"), TextInput::new().style(&TEXTINPUT_STYLE))
+						.style(&LABEL_STYLE),
+				),
+				Box::new(Checkbox::new(false, Span::from("Hidden"))),
+				Box::new(
+					Labeled::new(Span::from("Type"), ComboBox::new(FIELD_TYPE.as_slice()).style(&COMBOBOX_STYLE))
+					.style(&LABEL_STYLE),
+				),
 			],
 			selected: None,
 			scroll: RefCell::default(),

@@ -5,3 +5,4 @@ pub mod combo_box;
 pub mod entry_editor;
 pub mod widget;
 pub mod checkbox;
+pub mod label;
