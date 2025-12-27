@@ -186,11 +186,13 @@ impl Component for TextInput<'_> {
 		}
 	}
 
-	fn render(&self, frame: &mut Frame, ctx: &ComponentRenderCtx) {
+	fn render(&self, frame: &mut Frame, ctx: &mut ComponentRenderCtx) {
 		let padding_left = Span::raw(" ".repeat(self.style.padding[0] as usize));
 		let padding_right = Span::raw(" ".repeat(self.style.padding[1] as usize));
 		let input_span = Span::from(self.input.as_str());
-		let spw = self.input.graphemes(true)
+		let spw = self
+			.input
+			.graphemes(true)
 			.map(|g| UnicodeWidthStr::width(g).max(1))
 			.sum::<usize>();
 		let empty_space = ctx
@@ -209,7 +211,7 @@ impl Component for TextInput<'_> {
 			input_span,
 			spacer,
 			self.style.markers[1].clone(),
-			padding_right
+			padding_right,
 		])
 		.set_style(if ctx.selected {
 			self.style.style_selected()
@@ -223,7 +225,9 @@ impl Component for TextInput<'_> {
 
 		if ctx.selected {
 			frame.set_cursor_position(Position::new(
-				ctx.area.x + self.cursor_x + self.style.markers[0].width() as u16,
+				ctx.area.x
+					+ self.cursor_x + self.style.padding[0]
+					+ self.style.markers[0].width() as u16,
 				ctx.area.y,
 			))
 		}

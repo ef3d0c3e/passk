@@ -2,6 +2,7 @@ use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::MediaKeyCode;
+use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::widgets::Clear;
 use ratatui::widgets::Scrollbar;
@@ -12,14 +13,34 @@ pub trait Component {
 	/// Send inputs to the component
 	fn input(&mut self, key: &KeyEvent);
 	/// Render the component
-	fn render(&self, frame: &mut Frame, ctx: &ComponentRenderCtx);
+	fn render(&self, frame: &mut Frame, ctx: &mut ComponentRenderCtx);
 	/// Widget height, for vertical layouts
 	fn height(&self) -> u16;
 }
 
-pub struct ComponentRenderCtx {
+#[derive(PartialEq, Eq)]
+pub struct Overlay {
+	pub z_level: u16,
+	pub buffer: Buffer,
+}
+
+impl PartialOrd for Overlay {
+	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+		self.z_level.partial_cmp(&other.z_level)
+	}
+}
+
+pub struct ComponentRenderCtx<'c> {
 	pub area: Rect,
 	pub selected: bool,
+	pub queue: &'c mut Vec<Overlay>,
+}
+
+impl<'c> ComponentRenderCtx<'c> {
+	pub fn push(&mut self, overlay: Overlay) {
+		let idx = self.queue.partition_point(|o| o.z_level <= overlay.z_level);
+		self.queue.insert(idx, overlay);
+	}
 }
 
 pub enum FormEvent<'s> {
@@ -134,7 +155,7 @@ pub trait FormExt: Form {
 					current: self.selected(),
 				});
 			}
-			_ => { return self.event(FormEvent::Key { key }) }
+			_ => return self.event(FormEvent::Key { key }),
 		}
 		None
 	}
@@ -147,7 +168,7 @@ impl<T: FormExt + ?Sized> Component for T {
 		let _ = FormExt::input(self, key);
 	}
 
-	fn render(&self, frame: &mut Frame, ctx: &ComponentRenderCtx) {
+	fn render(&self, frame: &mut Frame, ctx: &mut ComponentRenderCtx) {
 		// Final render rectangle
 		let inner_area = Rect {
 			x: ctx.area.x,
@@ -158,6 +179,7 @@ impl<T: FormExt + ?Sized> Component for T {
 		frame.render_widget(Clear, ctx.area);
 
 		self.ensure_visible(inner_area.height);
+		let mut queue = vec![];
 
 		let mut y = inner_area.y.saturating_sub(self.scroll());
 		for (idx, component) in self.components().iter().enumerate() {
@@ -171,13 +193,12 @@ impl<T: FormExt + ?Sized> Component for T {
 
 			// Only render if visible
 			if rect.y + rect.height > inner_area.y && rect.y < inner_area.y + inner_area.height {
-				component.render(
-					frame,
-					&ComponentRenderCtx {
-						area: rect,
-						selected: Some(idx) == self.selected(),
-					},
-				);
+				let mut ctx = ComponentRenderCtx {
+					area: rect,
+					selected: Some(idx) == self.selected(),
+					queue: &mut queue,
+				};
+				component.render(frame, &mut ctx);
 			}
 
 			y += h;
@@ -194,6 +215,12 @@ impl<T: FormExt + ?Sized> Component for T {
 			height: ctx.area.height,
 		};
 		frame.render_stateful_widget(scrollbar, scrollbar_area, &mut scroll_state);
+
+		// Render queue
+		let buffer = frame.buffer_mut();
+		for overlay in queue {
+			buffer.merge(&overlay.buffer);
+		}
 	}
 
 	fn height(&self) -> u16 {

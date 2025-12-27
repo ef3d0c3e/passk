@@ -94,7 +94,7 @@ impl Component for Checkbox<'_> {
 		}
 	}
 
-	fn render(&self, frame: &mut Frame, ctx: &ComponentRenderCtx) {
+	fn render(&self, frame: &mut Frame, ctx: &mut ComponentRenderCtx) {
 		let padding_left = Span::raw(" ".repeat(self.style.padding[0] as usize));
 		let padding_right = Span::raw(" ".repeat(self.style.padding[1] as usize));
 		let spacing = Span::raw(" ".repeat(self.style.spacing as usize));

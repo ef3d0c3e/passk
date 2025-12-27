@@ -348,11 +348,13 @@ impl EntryEditor {
 			let horizontal = Layout::horizontal([Constraint::Percentage(40)]).flex(Flex::Center);
 			let [area] = area.layout(&vertical);
 			let [area] = area.layout(&horizontal);
-			let ctx = ComponentRenderCtx {
+			let mut queue = vec![];
+			let mut ctx = ComponentRenderCtx {
 				area,
 				selected: false,
+				queue: &mut queue,
 			};
-			editor.render(frame, &ctx);
+			editor.render(frame, &mut ctx);
 		}
 	}
 }

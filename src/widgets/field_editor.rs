@@ -3,6 +3,7 @@ use std::cell::RefCell;
 use std::sync::LazyLock;
 
 use crate::widgets::checkbox::Checkbox;
+use crate::widgets::combo_box::ComboBox;
 use crate::widgets::combo_box::ComboItem;
 use crate::widgets::text_input::TextInput;
 use crate::widgets::widget::Component;
@@ -123,6 +124,7 @@ impl<'s> FieldEditor<'s> {
 			components: vec![
 				Box::new(Checkbox::new(false, Span::from("First"))),
 				Box::new(TextInput::new()),
+				Box::new(ComboBox::new(FIELD_TYPE.as_slice())),
 				Box::new(Checkbox::new(false, Span::from("Test"))),
 			],
 			selected: None,
