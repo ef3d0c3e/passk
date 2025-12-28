@@ -1,6 +1,9 @@
 use std::cell::RefCell;
+use std::default;
 use std::sync::LazyLock;
 
+use crate::data::field::Field;
+use crate::data::field::FieldValue;
 use crate::widgets::checkbox::Checkbox;
 use crate::widgets::checkbox::CheckboxStyle;
 use crate::widgets::combo_box::ComboBox;
@@ -19,14 +22,23 @@ use crate::widgets::text_input::TextInputStyle;
 use crate::widgets::widget::Component;
 use crate::widgets::widget::ComponentRenderCtx;
 use crate::widgets::widget::ComponentVisitor;
+use color_eyre::eyre::Error;
+use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::KeyCode;
-use ratatui::Frame;
+use crossterm::event::KeyEvent;
+use crossterm::event::KeyModifiers;
+use ratatui::layout::Rect;
 use ratatui::style::Color;
 use ratatui::style::Style;
 use ratatui::style::Stylize;
 use ratatui::symbols::border::QUADRANT_OUTSIDE;
+use ratatui::text::Line;
 use ratatui::text::Span;
+use ratatui::text::Text;
 use ratatui::widgets::Block;
+use ratatui::widgets::Paragraph;
+use ratatui::Frame;
+use serde_json::Value;
 
 static FIELD_TYPE: LazyLock<[ComboItem; 7]> = LazyLock::new(|| {
 	[
@@ -68,11 +80,79 @@ static FIELD_TYPE: LazyLock<[ComboItem; 7]> = LazyLock::new(|| {
 	]
 });
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum FieldValueKind {
+	#[default]
+	Text,
+	Url,
+	Phone,
+	Mail,
+	TOTPRFC6238,
+	TOTPSteam,
+	TwoFactorRecovery,
+	Binary,
+}
+
+impl TryFrom<usize> for FieldValueKind {
+	type Error = &'static str;
+
+	fn try_from(value: usize) -> Result<Self, Self::Error> {
+		match value {
+			0 => Ok(FieldValueKind::Text),
+			1 => Ok(FieldValueKind::Url),
+			2 => Ok(FieldValueKind::Phone),
+			3 => Ok(FieldValueKind::Mail),
+			4 => Ok(FieldValueKind::TOTPRFC6238),
+			5 => Ok(FieldValueKind::TOTPSteam),
+			6 => Ok(FieldValueKind::TwoFactorRecovery),
+			7 => Ok(FieldValueKind::Binary),
+			_ => Err("Invalid value"),
+		}
+	}
+}
+
+impl FieldValueKind {
+	fn id(&self) -> usize {
+		match self {
+			FieldValueKind::Text => 0,
+			FieldValueKind::Url => 1,
+			FieldValueKind::Phone => 2,
+			FieldValueKind::Mail => 3,
+			FieldValueKind::TOTPRFC6238 => 4,
+			FieldValueKind::TOTPSteam => 5,
+			FieldValueKind::TwoFactorRecovery => 6,
+			FieldValueKind::Binary => 7,
+		}
+	}
+
+	fn name(&self) -> &'static str {
+		match self {
+			FieldValueKind::Text => "Text",
+			FieldValueKind::Url => "URL",
+			FieldValueKind::Phone => "Phone",
+			FieldValueKind::Mail => "E-Mail",
+			FieldValueKind::TOTPRFC6238 => "TOTP (RFC-6238)",
+			FieldValueKind::TOTPSteam => "TOTP (Steam)",
+			FieldValueKind::TwoFactorRecovery => "2FA Recovery",
+			FieldValueKind::Binary => "Binary",
+		}
+	}
+}
+
 pub struct FieldEditor {
+	title: String,
 	style: FormStyle,
 
 	// Form data
-	components: Vec<Box<dyn Component>>,
+	field_name: Labeled<'static, TextInput<'static>>,
+	field_hidden: Checkbox<'static>,
+	field_type: Labeled<'static, ComboBox<'static, 'static>>,
+
+	value_kind: Option<FieldValueKind>,
+	prev_value_kind: Option<FieldValueKind>,
+	field_value: Option<Labeled<'static, TextInput<'static>>>,
+
 	selected: Option<usize>,
 	scroll: RefCell<u16>,
 }
@@ -92,11 +172,11 @@ static TEXTINPUT_STYLE: LazyLock<TextInputStyle> = LazyLock::new(|| TextInputSty
 	selected_style: None,
 });
 static CHECKBOX_STYLE: LazyLock<CheckboxStyle> = LazyLock::new(|| CheckboxStyle {
-    padding: [1, 0],
-    spacing: 1,
-    markers: ["󰄱 ".into(), "󰄵 ".into()],
+	padding: [1, 0],
+	spacing: 1,
+	markers: ["󰄱 ".into(), "󰄵 ".into()],
 	style: Some(Style::default().fg(Color::White)),
-    selected_style: None,
+	selected_style: None,
 });
 static COMBOBOX_STYLE: LazyLock<ComboBoxStyle> = LazyLock::new(|| ComboBoxStyle {
 	padding: Default::default(),
@@ -116,58 +196,135 @@ static COMBOBOX_STYLE: LazyLock<ComboBoxStyle> = LazyLock::new(|| ComboBoxStyle 
 	selected_style: Default::default(),
 });
 
-impl Default for FieldEditor {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl FieldEditor {
-	pub fn new() -> Self {
+	pub fn new(title: String) -> Self {
 		Self {
+			title,
 			style: FormStyle {
 				bg: Color::from_u32(0x2f2f2f),
 			},
-			components: vec![
-				Box::new(
-					Labeled::new(Span::from("Name"), TextInput::new().style(&TEXTINPUT_STYLE))
-						.style(&LABEL_STYLE),
-				),
-				Box::new(Checkbox::new(false, Span::from("Hidden")).style(&CHECKBOX_STYLE)),
-				Box::new(
-					Labeled::new(
-						Span::from("Type"),
-						ComboBox::new(FIELD_TYPE.as_slice()).style(&COMBOBOX_STYLE),
-					)
-					.style(&LABEL_STYLE),
-				),
-			],
+			field_name: Labeled::new(Span::from("Name"), TextInput::new().style(&TEXTINPUT_STYLE))
+				.style(&LABEL_STYLE),
+			field_hidden: Checkbox::new(false, Span::from("Hidden")).style(&CHECKBOX_STYLE),
+			field_type: Labeled::new(
+				Span::from("Type"),
+				ComboBox::new(FIELD_TYPE.as_slice()).style(&COMBOBOX_STYLE),
+			)
+			.style(&LABEL_STYLE),
+
+			value_kind: None,
+			prev_value_kind: None,
+			field_value: None,
 			selected: None,
 			scroll: RefCell::default(),
 		}
 	}
-}
 
-#[derive(Default)]
-struct ValueTypeVisitor {
-	value_type: Option<usize>,
-}
-
-impl ComponentVisitor for ValueTypeVisitor {
-	fn visit_combo_box(&mut self, combo_box: &ComboBox) {
-		self.value_type = combo_box.submit();
+	pub fn with_value(mut self, field: &Field) -> Self {
+		self.field_name.inner.set_input(field.name.clone());
+		self.field_hidden.set_value(field.hidden);
+		let kind = match &field.value {
+			FieldValue::Text(text) => {
+				let kind = FieldValueKind::Text;
+				self.field_value = Some(
+					Labeled::new(
+						kind.name().into(),
+						TextInput::new()
+							.style(&TEXTINPUT_STYLE)
+							.with_input(text.clone()),
+					)
+					.style(&LABEL_STYLE),
+				);
+				kind
+			}
+			FieldValue::Url(text) => {
+				let kind = FieldValueKind::Url;
+				self.field_value = Some(
+					Labeled::new(
+						kind.name().into(),
+						TextInput::new()
+							.style(&TEXTINPUT_STYLE)
+							.with_input(text.clone()),
+					)
+					.style(&LABEL_STYLE),
+				);
+				kind
+			},
+			FieldValue::Phone(text) => {
+				let kind = FieldValueKind::Phone;
+				self.field_value = Some(
+					Labeled::new(
+						kind.name().into(),
+						TextInput::new()
+							.style(&TEXTINPUT_STYLE)
+							.with_input(text.clone()),
+					)
+					.style(&LABEL_STYLE),
+				);
+				kind
+			},
+			FieldValue::Email(text) => {
+				let kind = FieldValueKind::Mail;
+				self.field_value = Some(
+					Labeled::new(
+						kind.name().into(),
+						TextInput::new()
+							.style(&TEXTINPUT_STYLE)
+							.with_input(text.clone()),
+					)
+					.style(&LABEL_STYLE),
+				);
+				kind
+			},
+			_ => todo!(),
+		};
+		self.field_type.inner.set_input(kind.name().to_owned());
+		self.value_kind = Some(kind);
+		self.prev_value_kind = Some(kind);
+		self
 	}
 }
 
 impl Form for FieldEditor {
 	type Return = bool;
 
-	fn components(&self) -> &[Box<dyn Component>] {
-		self.components.as_slice()
+	fn component_count(&self) -> usize {
+		match self.value_kind {
+			Some(_) => 4,
+			None => 3,
+		}
 	}
 
-	fn components_mut(&mut self) -> &mut [Box<dyn Component>] {
-		self.components.as_mut_slice()
+	fn component(&self, id: usize) -> Option<&dyn Component> {
+		match id {
+			0 => Some(&self.field_name),
+			1 => Some(&self.field_hidden),
+			2 => Some(&self.field_type),
+			3 => {
+				if let Some(field) = &self.field_value {
+					Some(field)
+				} else {
+					None
+				}
+			}
+			_ => None,
+		}
+	}
+
+	fn component_mut(&mut self, id: usize) -> Option<&mut dyn Component> {
+		match id {
+			0 => Some(&mut self.field_name),
+			1 => Some(&mut self.field_hidden),
+			2 => Some(&mut self.field_type),
+			3 => {
+				if let Some(field) = &mut self.field_value {
+					Some(field)
+				} else {
+					None
+				}
+			}
+			_ => None,
+		}
 	}
 
 	fn get_style(&self) -> &FormStyle {
@@ -200,42 +357,37 @@ impl Form for FieldEditor {
 				}
 			}
 			FormEvent::Edit { id: 2, key: _ } => {
-				let mut visitor = ValueTypeVisitor::default();
-				self.accept(&mut visitor);
-				self.components.truncate(3);
-				if let Some(index) = visitor.value_type {
-					match index {
-						0 => self.components.push(Box::new(
-							Labeled::new(
-								Span::from("Text"),
-								TextInput::new().style(&TEXTINPUT_STYLE),
-							)
-							.style(&LABEL_STYLE),
-						)),
-						1 => self.components.push(Box::new(
-							Labeled::new(
-								Span::from("URL"),
-								TextInput::new().style(&TEXTINPUT_STYLE),
-							)
-							.style(&LABEL_STYLE),
-						)),
-						2 => self.components.push(Box::new(
-							Labeled::new(
-								Span::from("Phone Number"),
-								TextInput::new().style(&TEXTINPUT_STYLE),
-							)
-							.style(&LABEL_STYLE),
-						)),
-						3 => self.components.push(Box::new(
-							Labeled::new(
-								Span::from("E-Mail"),
-								TextInput::new().style(&TEXTINPUT_STYLE),
-							)
-							.style(&LABEL_STYLE),
-						)),
-						_ => {}
+				if let Some(Ok(kind)) = self
+					.field_type
+					.inner
+					.submit()
+					.map(|id| FieldValueKind::try_from(id))
+				{
+					if Some(kind) != self.prev_value_kind 
+					{
+						self.prev_value_kind = self.value_kind;
+						self.value_kind = Some(kind);
+						match kind {
+							FieldValueKind::Text
+								| FieldValueKind::Url
+								| FieldValueKind::Phone
+								| FieldValueKind::Mail => {
+									self.field_value = Some(
+										Labeled::new(
+											kind.name().into(),
+											TextInput::new().style(&TEXTINPUT_STYLE),
+										)
+										.style(&LABEL_STYLE),
+									)
+								}
+							_ => todo!(),
+						}
 					}
-				} 
+				} else {
+					self.prev_value_kind = self.value_kind;
+					self.value_kind = None;
+					self.field_value = None;
+				}
 			}
 			_ => {}
 		}
@@ -246,20 +398,41 @@ impl Form for FieldEditor {
 		let area = ctx.area;
 		let border = Block::bordered()
 			.border_set(QUADRANT_OUTSIDE)
-			.title("Edit Field: Foobar")
+			.title(self.title.as_str())
 			.title_style(Style::default().fg(Color::White))
 			.title_alignment(ratatui::layout::HorizontalAlignment::Center)
 			.bg(self.style.bg)
 			.fg(Color::from_u32(0x1a1a1f));
 		frame.render_widget(border, area);
+		let text = Text::from(Line::from(vec![
+			"⮁".bold().fg(Color::Green),
+			" (navigate) ".fg(Color::White),
+			"esc".bold().fg(Color::Green),
+			" (cancel) ".fg(Color::White),
+			"enter".bold().fg(Color::Green),
+			" (submit) ".fg(Color::White),
+			"space".bold().fg(Color::Green),
+			" (toggle) ".fg(Color::White),
+			"C-g".bold().fg(Color::Green),
+			" (generate) ".fg(Color::White),
+		]));
+		let help_message = Paragraph::new(text);
+		frame.render_widget(
+			help_message,
+			Rect {
+				x: area.x + 1,
+				y: area.y + 1,
+				width: area.width.saturating_sub(2),
+				height: 1,
+			},
+		);
 
 		ctx.area.x += 1;
 		ctx.area.width = ctx.area.width.saturating_sub(2);
-		ctx.area.y += 1;
-		ctx.area.height = ctx.area.height.saturating_sub(2);
-        self.render_body(frame, ctx);
-
-    }
+		ctx.area.y += 2;
+		ctx.area.height = ctx.area.height.saturating_sub(3);
+		self.render_body(frame, ctx);
+	}
 }
 
 /*

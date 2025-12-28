@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::fmt::format;
 
 use crate::data::field::Field;
 use crate::data::field::FieldValue;
@@ -91,7 +92,7 @@ impl EntryEditor {
 	pub fn input(&mut self, key: &KeyEvent) -> bool {
 		// Field editor
 		if let Some(editor) = &mut self.editor {
-			if let Some(FormSignal::Exit) = <FieldEditor as FormExt>::input(editor, key) { return true }
+			if let Some(FormSignal::Exit) = <FieldEditor as FormExt>::input(editor, key) { self.editor = None }
 			//if let Some(field) = editor.input(key) {
 			//	if let Some((name, hidden, value)) = field {
 			//		if self.selected != -1 {
@@ -180,15 +181,17 @@ impl EntryEditor {
 
 			KeyCode::Char('e') | KeyCode::Enter => {
 				if self.selected != -1 {
+					let field = &self.entry.fields[self.selected as usize];
 					self.editor = Some(
-						FieldEditor::new()
+						FieldEditor::new(format!("Edit Field: {}", field.name))
+						.with_value(field)
 							//.with_field(&self.entry.fields[self.selected as usize]),
 					)
 				}
 			}
 			KeyCode::Char('a') => {
 				self.selected = -1;
-				self.editor = Some(FieldEditor::new());
+				self.editor = Some(FieldEditor::new("New Field".into()));
 			}
 			/*
 			KeyCode::Delete | KeyCode::Char('d') => {

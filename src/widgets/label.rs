@@ -12,8 +12,7 @@ use crate::widgets::widget::ComponentVisitor;
 
 use super::widget::ComponentRenderCtx;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum LabelDisplay<'s> {
 	/// [Label][spacing][Widget]
 	Inline {
@@ -22,13 +21,12 @@ pub enum LabelDisplay<'s> {
 	/// [Label]
 	/// [Widget]
 	#[default]
- Newline,
+	Newline,
 
 	Block {
 		block: Block<'s>,
 	},
 }
-
 
 #[derive(Debug, Clone, Default)]
 pub struct LabelStyle<'s> {
@@ -59,7 +57,7 @@ where
 {
 	label: Span<'s>,
 	style: &'s LabelStyle<'s>,
-	inner: T,
+	pub inner: T,
 }
 
 impl<'s, T> Labeled<'s, T>
@@ -139,14 +137,11 @@ where
 	}
 
 	fn height(&self) -> u16 {
-		 self.inner.height() + match self.style.display {
-			LabelDisplay::Inline { spacing: _ } => 0,
-			LabelDisplay::Newline => 1,
-			LabelDisplay::Block { block: _ } => 2,
-		}
-	}
-	
-	fn accept(&self, visitor: &mut dyn ComponentVisitor) {
-		self.inner.accept(visitor);
+		self.inner.height()
+			+ match self.style.display {
+				LabelDisplay::Inline { spacing: _ } => 0,
+				LabelDisplay::Newline => 1,
+				LabelDisplay::Block { block: _ } => 2,
+			}
 	}
 }

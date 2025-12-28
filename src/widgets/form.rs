@@ -1,8 +1,10 @@
+use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use ratatui::layout::Rect;
 use ratatui::style::Color;
 use ratatui::style::Style;
+use ratatui::widgets::Clear;
 use ratatui::widgets::Scrollbar;
 use ratatui::widgets::ScrollbarState;
 use ratatui::Frame;
@@ -38,8 +40,10 @@ pub struct FormStyle {
 pub trait Form {
 	type Return;
 
-	fn components(&self) -> &[Box<dyn Component>];
-	fn components_mut(&mut self) -> &mut [Box<dyn Component>];
+	// Box<..> could become &..
+	fn component_count(&self) -> usize;
+	fn component(&self, index: usize) -> Option<&dyn Component>;
+	fn component_mut(&mut self, index: usize) -> Option<&mut dyn Component>;
 
 	fn selected(&self) -> Option<usize>;
 	fn set_selected(&mut self, selected: Option<usize>);
@@ -61,14 +65,10 @@ pub trait FormExt: Form {
 			return;
 		};
 
-		let y: u16 = self
-			.components()
-			.iter()
-			.take(selected)
+		let y: u16 = (0..selected).map(|i| self.component(i).unwrap())
 			.map(|c| c.height())
 			.sum();
-
-		let h = self.components()[selected].height();
+		let h = self.component(selected).unwrap().height();
 		let scroll = self.scroll();
 
 		if y < scroll {
@@ -79,11 +79,11 @@ pub trait FormExt: Form {
 	}
 
 	fn focus_next(&mut self) {
-		match (self.selected(), self.components().is_empty()) {
+		match (self.selected(), self.component_count() == 0) {
 			(_, true) => self.set_selected(None),
 			(None, false) => self.set_selected(Some(0)),
 			(Some(x), false) => {
-				if self.components().len() > x + 1 {
+				if self.component_count() > x + 1 {
 					self.set_selected(Some(x + 1));
 				} else {
 					self.set_selected(Some(x));
@@ -93,7 +93,7 @@ pub trait FormExt: Form {
 	}
 
 	fn focus_prev(&mut self) {
-		match (self.selected(), self.components().is_empty()) {
+		match (self.selected(), self.component_count() == 0) {
 			(_, true) => self.set_selected(None),
 			(None, false) => self.set_selected(None),
 			(Some(x), false) => {
@@ -108,7 +108,7 @@ pub trait FormExt: Form {
 
 	fn input(&mut self, key: &KeyEvent) -> Option<FormSignal<<Self as Form>::Return>> {
 		if let Some(selected) = self.selected() {
-			let eaten = self.components_mut()[selected].input(key);
+			let eaten = self.component_mut(selected).unwrap().input(key);
 			if let Some(signal) = self.event(FormEvent::Edit { id: selected, key }) {
 				return Some(signal);
 			}
@@ -141,6 +141,8 @@ pub trait FormExt: Form {
 
 	/// Render the form body
 	fn render_body(&self, frame: &mut Frame, ctx: &mut ComponentRenderCtx) {
+		frame.render_widget(Clear, ctx.area);
+
 		// Final render rectangle
 		let inner_area = Rect {
 			x: ctx.area.x,
@@ -161,7 +163,7 @@ pub trait FormExt: Form {
 		let mut queue = vec![];
 
 		let mut y = inner_area.y.saturating_sub(self.scroll());
-		for (idx, component) in self.components().iter().enumerate() {
+		for (idx, component) in (0..self.component_count()).map(|i| (i, self.component(i).unwrap())) {
 			let h = component.height();
 			let rect = Rect {
 				x: inner_area.x,
@@ -216,14 +218,8 @@ impl<T: FormExt + ?Sized> Component for T {
 	}
 
 	fn height(&self) -> u16 {
-		self.components()
-			.iter()
-			.fold(0, |r, component| r + component.height())
-	}
-
-	fn accept(&self, visitor: &mut dyn ComponentVisitor) {
-		for component in self.components() {
-			component.accept(visitor);
-		}
+		(0..self.component_count())
+			.map(|i| self.component(i).unwrap().height())
+			.fold(0, |r, height| r + height)
 	}
 }

@@ -80,6 +80,10 @@ impl<'s> Checkbox<'s> {
 		self.value
 	}
 
+	pub fn set_value(&mut self, value: bool) {
+		self.value = value
+	}
+
 	pub fn toggle(&mut self) {
 		self.value = !self.value;
 	}
@@ -128,9 +132,5 @@ impl Component for Checkbox<'_> {
 
 	fn height(&self) -> u16 {
 		1
-	}
-
-	fn accept(&self, visitor: &mut dyn ComponentVisitor) {
-		visitor.visit_checkbox(self);
 	}
 }

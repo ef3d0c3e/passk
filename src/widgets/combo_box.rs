@@ -500,8 +500,4 @@ impl Component for ComboBox<'_, '_> {
 	fn height(&self) -> u16 {
 		1
 	}
-
-	fn accept(&self, visitor: &mut dyn ComponentVisitor) {
-		visitor.visit_combo_box(self);
-	}
 }

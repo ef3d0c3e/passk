@@ -65,9 +65,9 @@ pub struct TextInput<'s> {
 }
 
 impl<'s> Default for TextInput<'s> {
-    fn default() -> Self {
-        Self::new()
-    }
+	fn default() -> Self {
+		Self::new()
+	}
 }
 
 impl<'s> TextInput<'s> {
@@ -236,9 +236,5 @@ impl Component for TextInput<'_> {
 
 	fn height(&self) -> u16 {
 		1
-	}
-
-	fn accept(&self, visitor: &mut dyn ComponentVisitor) {
-		visitor.visit_text_input(self);
 	}
 }

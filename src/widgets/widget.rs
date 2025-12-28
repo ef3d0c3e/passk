@@ -41,15 +41,20 @@ pub trait Component {
 	fn render(&self, frame: &mut Frame, ctx: &mut ComponentRenderCtx);
 	/// Widget height, for vertical layouts
 	fn height(&self) -> u16;
-
-	fn accept(&self, visitor: &mut dyn ComponentVisitor);
 }
 
 pub trait ComponentVisitor {
 	#[allow(unused)]
-	fn visit_checkbox(&mut self, checkbox: &Checkbox) {}
+	fn visit_checkbox(&mut self, id:usize, checkbox: &Checkbox) {}
 	#[allow(unused)]
-	fn visit_text_input(&mut self, text_input: &TextInput) {}
+	fn visit_text_input(&mut self, id:usize, text_input: &TextInput) {}
 	#[allow(unused)]
-	fn visit_combo_box(&mut self, combo_box: &ComboBox) {}
+	fn visit_combo_box(&mut self, id:usize, combo_box: &ComboBox) {}
+
+	#[allow(unused)]
+	fn visit_checkbox_mut(&mut self, id:usize, checkbox: &mut Checkbox) {}
+	#[allow(unused)]
+	fn visit_text_input_mut(&mut self, id:usize, text_input: &mut TextInput) {}
+	#[allow(unused)]
+	fn visit_combo_box_mut(&mut self, id:usize, combo_box: &mut ComboBox) {}
 }
