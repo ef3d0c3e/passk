@@ -1,4 +1,3 @@
-use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use ratatui::layout::Rect;
@@ -11,7 +10,6 @@ use ratatui::Frame;
 
 use crate::widgets::widget::Component;
 use crate::widgets::widget::ComponentRenderCtx;
-use crate::widgets::widget::ComponentVisitor;
 
 pub enum FormEvent<'s> {
 	Focus {
@@ -220,6 +218,6 @@ impl<T: FormExt + ?Sized> Component for T {
 	fn height(&self) -> u16 {
 		(0..self.component_count())
 			.map(|i| self.component(i).unwrap().height())
-			.fold(0, |r, height| r + height)
+			.sum::<u16>()
 	}
 }

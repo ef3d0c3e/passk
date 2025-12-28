@@ -10,7 +10,6 @@ use ratatui::text::Span;
 use ratatui::Frame;
 
 use crate::widgets::widget::Component;
-use crate::widgets::widget::ComponentVisitor;
 
 use super::widget::ComponentRenderCtx;
 

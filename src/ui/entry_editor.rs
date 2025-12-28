@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::fmt::format;
 
 use crate::data::field::Field;
 use crate::data::field::FieldValue;

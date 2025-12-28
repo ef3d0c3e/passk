@@ -8,7 +8,6 @@ use ratatui::widgets::Block;
 use ratatui::Frame;
 
 use crate::widgets::widget::Component;
-use crate::widgets::widget::ComponentVisitor;
 
 use super::widget::ComponentRenderCtx;
 
@@ -24,7 +23,7 @@ pub enum LabelDisplay<'s> {
 	Newline,
 
 	Block {
-		block: Block<'s>,
+		block: Box<Block<'s>>,
 	},
 }
 

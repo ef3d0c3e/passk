@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::default;
 use std::sync::LazyLock;
 
 use crate::data::field::Field;
@@ -21,12 +20,7 @@ use crate::widgets::text_input::TextInput;
 use crate::widgets::text_input::TextInputStyle;
 use crate::widgets::widget::Component;
 use crate::widgets::widget::ComponentRenderCtx;
-use crate::widgets::widget::ComponentVisitor;
-use color_eyre::eyre::Error;
-use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::KeyCode;
-use crossterm::event::KeyEvent;
-use crossterm::event::KeyModifiers;
 use ratatui::layout::Rect;
 use ratatui::style::Color;
 use ratatui::style::Style;
@@ -38,7 +32,6 @@ use ratatui::text::Text;
 use ratatui::widgets::Block;
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
-use serde_json::Value;
 
 static FIELD_TYPE: LazyLock<[ComboItem; 7]> = LazyLock::new(|| {
 	[
@@ -160,7 +153,7 @@ pub struct FieldEditor {
 static LABEL_STYLE: LazyLock<LabelStyle> = LazyLock::new(|| LabelStyle {
 	padding: [0, 0],
 	display: LabelDisplay::Block {
-		block: Block::bordered(),
+		block: Box::new(Block::bordered()),
 	},
 	style: Some(Style::default().fg(Color::White)),
 	style_selected: None,
@@ -361,7 +354,7 @@ impl Form for FieldEditor {
 					.field_type
 					.inner
 					.submit()
-					.map(|id| FieldValueKind::try_from(id))
+					.map(FieldValueKind::try_from)
 				{
 					if Some(kind) != self.prev_value_kind 
 					{

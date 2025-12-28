@@ -14,7 +14,6 @@ use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
 use crate::widgets::widget::Component;
-use crate::widgets::widget::ComponentVisitor;
 
 use super::widget::ComponentRenderCtx;
 
