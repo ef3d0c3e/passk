@@ -1,6 +1,8 @@
+use core::panic;
+
 use crossterm::event::KeyEvent;
 use ratatui::buffer::Buffer;
-use ratatui::layout::Rect;
+use ratatui::layout::{Position, Rect};
 use ratatui::Frame;
 
 /// Overlay for Z-level support
@@ -21,12 +23,38 @@ pub struct ComponentRenderCtx<'c> {
 	pub area: Rect,
 	pub selected: bool,
 	pub queue: &'c mut Vec<Overlay>,
+	pub depth: usize,
+	pub cursor: Option<(usize, Position)>,
 }
 
 impl<'c> ComponentRenderCtx<'c> {
 	pub fn push(&mut self, overlay: Overlay) {
 		let idx = self.queue.partition_point(|o| o.z_level <= overlay.z_level);
 		self.queue.insert(idx, overlay);
+	}
+
+	pub fn with_child<R, F>(&mut self, f: F) -> R
+	where
+		F: FnOnce(&mut Self) -> R,
+	{
+		self.depth += 1;
+		if let Some(cursor) = self.cursor {
+			if cursor.0 < self.depth {
+				self.cursor = None
+			}
+		}
+		let ret = f(self);
+		self.depth -= 1;
+		ret
+	}
+
+	pub fn set_cursor(&mut self, pos: Position) {
+		if let Some(cursor) = &self.cursor {
+			if cursor.0 > self.depth {
+				return;
+			}
+		}
+		self.cursor = Some((self.depth, pos));
 	}
 }
 

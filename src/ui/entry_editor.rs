@@ -343,8 +343,13 @@ impl EntryEditor {
 				area,
 				selected: false,
 				queue: &mut queue,
+				depth: 0,
+				cursor: None,
 			};
 			editor.render_form(frame, &mut ctx);
+			if let Some((_, cursor)) = ctx.cursor {
+				frame.set_cursor_position(cursor);
+			}
 		}
 	}
 }

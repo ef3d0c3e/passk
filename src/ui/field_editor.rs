@@ -1,4 +1,3 @@
-use core::panic;
 use std::cell::RefCell;
 use std::sync::LazyLock;
 
@@ -486,11 +485,13 @@ impl Form for FieldEditor {
 		self.render_body(frame, ctx);
 
 		if let Some(generator) = &self.generator {
-			ctx.area.x += 1;
-			ctx.area.width = ctx.area.width.saturating_sub(3);
-			ctx.area.y += 2;
-			ctx.area.height = ctx.area.height.saturating_sub(3);
-			generator.render_form(frame, ctx);
+			ctx.with_child(|ctx| {
+				ctx.area.x += 1;
+				ctx.area.width = ctx.area.width.saturating_sub(3);
+				ctx.area.y += 2;
+				ctx.area.height = ctx.area.height.saturating_sub(3);
+				generator.render_form(frame, ctx);
+			});
 		}
 	}
 }

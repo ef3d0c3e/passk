@@ -1,3 +1,5 @@
+use core::panic;
+
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyModifiers;
@@ -152,12 +154,17 @@ pub trait FormExt: Form {
 
 			// Only render if visible
 			if rect.y + rect.height > inner_area.y && rect.y < inner_area.y + inner_area.height {
-				let mut ctx = ComponentRenderCtx {
+				let mut new_ctx = ComponentRenderCtx {
 					area: rect,
 					selected: Some(idx) == self.selected(),
 					queue: &mut queue,
+					depth: 0,
+					cursor: None,
 				};
-				component.render(frame, &mut ctx);
+				component.render(frame, &mut new_ctx);
+				if let Some((_, cursor)) = new_ctx.cursor {
+					ctx.set_cursor(cursor);
+				}
 			}
 
 			y += h;

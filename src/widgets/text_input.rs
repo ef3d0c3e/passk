@@ -219,12 +219,12 @@ impl Component for TextInput<'_> {
 		frame.render_widget(draw, area);
 
 		if ctx.selected {
-			frame.set_cursor_position(Position::new(
+			ctx.set_cursor(Position::new(
 				ctx.area.x
 					+ self.cursor_x + self.style.padding[0]
 					+ self.style.markers[0].width() as u16,
 				ctx.area.y,
-			))
+			));
 		}
 	}
 

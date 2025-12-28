@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::ops::Sub;
 use std::sync::LazyLock;
 
 use crossterm::event::KeyCode;
