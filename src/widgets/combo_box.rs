@@ -311,7 +311,7 @@ impl Component for ComboBox<'_, '_> {
 			KeyCode::Char('a') if ctrl_pressed => self.grapheme_index = 0,
 			KeyCode::Char('e') if ctrl_pressed => self.grapheme_index = self.input.len(),
 			// TODO: Ctrl-arrow and kill-word
-			KeyCode::Char(to_insert) => self.enter_char(to_insert),
+			KeyCode::Char(to_insert) if !ctrl_pressed => self.enter_char(to_insert),
 			KeyCode::Backspace => self.delete_char(),
 			_ => return false,
 		}

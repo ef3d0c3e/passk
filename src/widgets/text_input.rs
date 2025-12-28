@@ -100,13 +100,8 @@ impl<'s> TextInput<'s> {
 		self.cursor_x = self.cursor_x();
 	}
 
-	pub fn submit(&mut self) -> String {
-		let mut empty = String::default();
-		std::mem::swap(&mut self.input, &mut empty);
-		self.grapheme_index = 0;
-		self.grapheme_count = 0;
-		self.cursor_x = 0;
-		empty
+	pub fn submit(&self) -> String {
+		self.input.clone()
 	}
 
 	fn move_cursor_left(&mut self) {
@@ -180,7 +175,7 @@ impl Component for TextInput<'_> {
 			KeyCode::Char('a') if ctrl_pressed => self.grapheme_index = 0,
 			KeyCode::Char('e') if ctrl_pressed => self.grapheme_index = self.input.len(),
 			// TODO: Ctrl-arrow and kill-word
-			KeyCode::Char(to_insert) => self.enter_char(to_insert),
+			KeyCode::Char(to_insert) if !ctrl_pressed => self.enter_char(to_insert),
 			_ => return false,
 		}
 		true

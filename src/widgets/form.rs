@@ -1,5 +1,6 @@
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
+use crossterm::event::KeyModifiers;
 use ratatui::layout::Rect;
 use ratatui::style::Color;
 use ratatui::style::Style;
@@ -11,24 +12,10 @@ use ratatui::Frame;
 use crate::widgets::widget::Component;
 use crate::widgets::widget::ComponentRenderCtx;
 
-pub enum FormEvent<'s> {
-	Focus {
-		previous: Option<usize>,
-		current: Option<usize>,
-	},
-	Edit {
-		id: usize,
-		key: &'s KeyEvent,
-	},
-	Key {
-		key: &'s KeyEvent,
-	},
-}
-
 #[derive(Debug)]
-pub enum FormSignal<T> {
+pub enum FormSignal {
 	Exit,
-	Return(T),
+	Return,
 }
 
 pub struct FormStyle {
@@ -36,8 +23,6 @@ pub struct FormStyle {
 }
 
 pub trait Form {
-	type Return;
-
 	// Box<..> could become &..
 	fn component_count(&self) -> usize;
 	fn component(&self, index: usize) -> Option<&dyn Component>;
@@ -51,8 +36,7 @@ pub trait Form {
 	fn scroll(&self) -> u16;
 	fn set_scroll(&self, scroll: u16);
 
-	fn event(&mut self, ev: FormEvent) -> Option<FormSignal<Self::Return>>;
-
+	fn input_form(&mut self, key: &KeyEvent) -> Option<FormSignal>;
 	fn render_form(&self, frame: &mut Frame, ctx: &mut ComponentRenderCtx);
 }
 
@@ -63,7 +47,8 @@ pub trait FormExt: Form {
 			return;
 		};
 
-		let y: u16 = (0..selected).map(|i| self.component(i).unwrap())
+		let y: u16 = (0..selected)
+			.map(|i| self.component(i).unwrap())
 			.map(|c| c.height())
 			.sum();
 		let h = self.component(selected).unwrap().height();
@@ -104,37 +89,31 @@ pub trait FormExt: Form {
 		}
 	}
 
-	fn input(&mut self, key: &KeyEvent) -> Option<FormSignal<<Self as Form>::Return>> {
+	fn input(&mut self, key: &KeyEvent) -> bool {
 		if let Some(selected) = self.selected() {
 			let eaten = self.component_mut(selected).unwrap().input(key);
-			if let Some(signal) = self.event(FormEvent::Edit { id: selected, key }) {
-				return Some(signal);
-			}
 			if eaten {
-				return None;
+				return true;
 			}
 		}
 
+		let ctrl_pressed = key.modifiers.contains(KeyModifiers::CONTROL);
 		match key.code {
 			KeyCode::Tab | KeyCode::Down => {
-				let previous = self.selected();
 				self.focus_next();
-				self.event(FormEvent::Focus {
-					previous,
-					current: self.selected(),
-				});
+			}
+			KeyCode::Char('n') if ctrl_pressed => {
+				self.focus_next();
 			}
 			KeyCode::BackTab | KeyCode::Up => {
-				let previous = self.selected();
 				self.focus_prev();
-				self.event(FormEvent::Focus {
-					previous,
-					current: self.selected(),
-				});
 			}
-			_ => return self.event(FormEvent::Key { key }),
+			KeyCode::Char('p') if ctrl_pressed => {
+				self.focus_prev();
+			}
+			_ => return false,
 		}
-		None
+		return true;
 	}
 
 	/// Render the form body
@@ -161,7 +140,8 @@ pub trait FormExt: Form {
 		let mut queue = vec![];
 
 		let mut y = inner_area.y.saturating_sub(self.scroll());
-		for (idx, component) in (0..self.component_count()).map(|i| (i, self.component(i).unwrap())) {
+		for (idx, component) in (0..self.component_count()).map(|i| (i, self.component(i).unwrap()))
+		{
 			let h = component.height();
 			let rect = Rect {
 				x: inner_area.x,
@@ -201,19 +181,6 @@ pub trait FormExt: Form {
 			buffer.merge(&overlay.buffer);
 		}
 	}
-}
-
-impl<T: Form + ?Sized> FormExt for T {}
-
-impl<T: FormExt + ?Sized> Component for T {
-	fn input(&mut self, key: &KeyEvent) -> bool {
-		let _ = FormExt::input(self, key);
-		false
-	}
-
-	fn render(&self, frame: &mut Frame, ctx: &mut ComponentRenderCtx) {
-		self.render_form(frame, ctx);
-	}
 
 	fn height(&self) -> u16 {
 		(0..self.component_count())
@@ -221,3 +188,5 @@ impl<T: FormExt + ?Sized> Component for T {
 			.sum::<u16>()
 	}
 }
+
+impl<T: Form + ?Sized> FormExt for T {}

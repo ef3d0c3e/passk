@@ -3,10 +3,6 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::Frame;
 
-use crate::widgets::checkbox::Checkbox;
-use crate::widgets::combo_box::ComboBox;
-use crate::widgets::text_input::TextInput;
-
 /// Overlay for Z-level support
 #[derive(PartialEq, Eq)]
 pub struct Overlay {
@@ -41,20 +37,4 @@ pub trait Component {
 	fn render(&self, frame: &mut Frame, ctx: &mut ComponentRenderCtx);
 	/// Widget height, for vertical layouts
 	fn height(&self) -> u16;
-}
-
-pub trait ComponentVisitor {
-	#[allow(unused)]
-	fn visit_checkbox(&mut self, id:usize, checkbox: &Checkbox) {}
-	#[allow(unused)]
-	fn visit_text_input(&mut self, id:usize, text_input: &TextInput) {}
-	#[allow(unused)]
-	fn visit_combo_box(&mut self, id:usize, combo_box: &ComboBox) {}
-
-	#[allow(unused)]
-	fn visit_checkbox_mut(&mut self, id:usize, checkbox: &mut Checkbox) {}
-	#[allow(unused)]
-	fn visit_text_input_mut(&mut self, id:usize, text_input: &mut TextInput) {}
-	#[allow(unused)]
-	fn visit_combo_box_mut(&mut self, id:usize, combo_box: &mut ComboBox) {}
 }

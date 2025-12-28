@@ -7,9 +7,8 @@ use crate::style::HELP_LINE_BG;
 use crate::ui::field_editor::FieldEditor;
 use crate::widgets::confirm::ConfirmDialog;
 use crate::Entry;
-use crate::widgets::form::FormExt;
+use crate::widgets::form::Form;
 use crate::widgets::form::FormSignal;
-use crate::widgets::widget::Component;
 use crate::widgets::widget::ComponentRenderCtx;
 
 use crossterm::event::KeyCode;
@@ -91,30 +90,24 @@ impl EntryEditor {
 	pub fn input(&mut self, key: &KeyEvent) -> bool {
 		// Field editor
 		if let Some(editor) = &mut self.editor {
-			if let Some(FormSignal::Exit) = <FieldEditor as FormExt>::input(editor, key) { self.editor = None }
-			//if let Some(field) = editor.input(key) {
-			//	if let Some((name, hidden, value)) = field {
-			//		if self.selected != -1 {
-			//			let field = &mut self.entry.fields[self.selected as usize];
-			//			field.name = name;
-			//			field.hidden = hidden;
-			//			field.value = value;
-			//			field.date_modified = Utc::now();
-			//			field.date_accessed = Utc::now();
-			//		} else {
-			//			self.entry.fields.push(Field {
-			//				name,
-			//				value,
-			//				hidden,
-			//				date_added: Utc::now(),
-			//				date_modified: Utc::now(),
-			//				date_accessed: Utc::now(),
-			//			});
-			//		}
-			//	}
-			//	self.editor = None;
-			//	return false;
-			//}
+			let signal = editor.input_form(key);
+			match signal {
+				Some(FormSignal::Exit) => self.editor = None,
+				Some(FormSignal::Return) => {
+					// TODO: Popup with error
+					if let Some(field) = editor.submit()
+					{
+						if self.selected == -1 {
+							self.entry.fields.push(field);
+						} else {
+							self.entry.fields[self.selected as usize] = field;
+
+						}
+					}
+					self.editor = None;
+				},
+				_ => {},
+			}
 			return false;
 		}
 
@@ -351,7 +344,7 @@ impl EntryEditor {
 				selected: false,
 				queue: &mut queue,
 			};
-			editor.render(frame, &mut ctx);
+			editor.render_form(frame, &mut ctx);
 		}
 	}
 }
