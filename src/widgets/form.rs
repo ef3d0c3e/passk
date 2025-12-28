@@ -50,6 +50,8 @@ pub trait Form {
 	fn set_scroll(&self, scroll: u16);
 
 	fn event(&mut self, ev: FormEvent) -> Option<FormSignal<Self::Return>>;
+
+	fn render_form(&self, frame: &mut Frame, ctx: &mut ComponentRenderCtx);
 }
 
 // Focus needs to update scrolling. Scrolling must be based on the focus widget's height
@@ -136,17 +138,9 @@ pub trait FormExt: Form {
 		}
 		None
 	}
-}
 
-impl<T: Form + ?Sized> FormExt for T {}
-
-impl<T: FormExt + ?Sized> Component for T {
-	fn input(&mut self, key: &KeyEvent) -> bool {
-		let _ = FormExt::input(self, key);
-		false
-	}
-
-	fn render(&self, frame: &mut Frame, ctx: &mut ComponentRenderCtx) {
+	/// Render the form body
+	fn render_body(&self, frame: &mut Frame, ctx: &mut ComponentRenderCtx) {
 		// Final render rectangle
 		let inner_area = Rect {
 			x: ctx.area.x,
@@ -206,6 +200,19 @@ impl<T: FormExt + ?Sized> Component for T {
 		for overlay in queue {
 			buffer.merge(&overlay.buffer);
 		}
+	}
+}
+
+impl<T: Form + ?Sized> FormExt for T {}
+
+impl<T: FormExt + ?Sized> Component for T {
+	fn input(&mut self, key: &KeyEvent) -> bool {
+		let _ = FormExt::input(self, key);
+		false
+	}
+
+	fn render(&self, frame: &mut Frame, ctx: &mut ComponentRenderCtx) {
+		self.render_form(frame, ctx);
 	}
 
 	fn height(&self) -> u16 {
