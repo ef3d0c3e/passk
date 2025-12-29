@@ -24,7 +24,7 @@ use crate::data::entry::Entry;
 use crate::data::entry::EntryTag;
 use crate::style::ENTRY_BG;
 use crate::style::HELP_LINE_BG;
-use crate::ui::entry_editor::EntryEditor;
+use crate::ui::entry::EntryEditor;
 use crate::widgets::label::LabelDisplay;
 use crate::widgets::label::LabelStyle;
 use crate::widgets::label::Labeled;
@@ -200,7 +200,7 @@ impl Explorer {
 impl Component for Explorer {
 	fn input(&mut self, key: &KeyEvent) -> bool {
 		if let Some(editor) = &mut self.editor {
-			if editor.input(key) {
+			if !editor.input(key) {
 				self.editor = None;
 			}
 			return true;
@@ -312,15 +312,14 @@ impl Component for Explorer {
 		scrollbar_area.width = 1;
 
 		frame.render_stateful_widget(
-			Scrollbar::default().orientation(ScrollbarOrientation::VerticalRight),
+			Scrollbar::default().orientation(ScrollbarOrientation::VerticalRight).style(Style::default().fg(Color::from_u32(0x7f7faf))),
 			scrollbar_area,
 			&mut *self.scrollbar.borrow_mut(),
 		);
 
-		// TODO: Render scrollbar for the list
-
 		if let Some(editor) = &self.editor {
-			editor.draw(frame, area);
+			ctx.area = area;
+			editor.render(frame, ctx);
 		}
 	}
 
