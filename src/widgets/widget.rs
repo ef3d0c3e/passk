@@ -60,6 +60,7 @@ impl<'c> ComponentRenderCtx<'c> {
 
 pub trait Component {
 	/// Send inputs to the component
+	/// Return `true` if the input was processed, `false` otherwise
 	fn input(&mut self, key: &KeyEvent) -> bool;
 	/// Render the component
 	fn render(&self, frame: &mut Frame, ctx: &mut ComponentRenderCtx);

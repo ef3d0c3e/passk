@@ -16,6 +16,7 @@ use crate::widgets::form::FormStyle;
 use crate::widgets::label::LabelDisplay;
 use crate::widgets::label::LabelStyle;
 use crate::widgets::label::Labeled;
+use crate::widgets::popup::Popup;
 use crate::widgets::text_input::TextInput;
 use crate::widgets::text_input::TextInputStyle;
 use crate::widgets::widget::Component;
@@ -143,6 +144,7 @@ pub struct FieldEditor {
 	scroll: RefCell<u16>,
 
 	generator: Option<FieldGenerator>,
+	confirm: Option<Popup<'static>>,
 }
 
 static LABEL_STYLE: LazyLock<LabelStyle> = LazyLock::new(|| LabelStyle {
@@ -206,6 +208,7 @@ impl FieldEditor {
 			selected: None,
 			scroll: RefCell::default(),
 			generator: None,
+			confirm: None,
 		}
 	}
 
@@ -371,20 +374,25 @@ impl Form for FieldEditor {
 			match signal {
 				Some(FormSignal::Exit) => self.generator = None,
 				Some(FormSignal::Return) => {
-					if let Some(generated) =  generator.submit()
-					{
+					if let Some(generated) = generator.submit() {
 						if self.selected == Some(0) {
 							self.field_name.inner.set_input(generated);
-						}
-						else if self.selected == Some(3) {
+						} else if self.selected == Some(3) {
 							if let Some(field) = &mut self.field_value {
-									field.inner.set_input(generated);
+								field.inner.set_input(generated);
 							}
 						}
 					}
-					self.generator = None 
-				},
+					self.generator = None
+				}
 				_ => {}
+			}
+			return None;
+		}
+		if let Some(confirm) = &mut self.confirm {
+			let v = confirm.input(key);
+			if v {
+				self.confirm = None
 			}
 			return None;
 		}
@@ -436,10 +444,17 @@ impl Form for FieldEditor {
 			&& key.code == KeyCode::Char('g')
 			&& (self.selected == Some(0) || self.selected == Some(3))
 		{
-			let name = if self.selected == Some(0) { "Name" } else {
+			let name = if self.selected == Some(0) {
+				"Name"
+			} else {
 				self.value_kind.unwrap().name()
 			};
 			self.generator = Some(FieldGenerator::new(format!("Generate for {name}")))
+		}
+
+		let ctrl_pressed = key.modifiers.contains(KeyModifiers::CONTROL);
+		if ctrl_pressed && key.code == KeyCode::Char('o') {
+			self.confirm = Some(Popup::new("Hello".into(), Paragraph::new("Lorem ipsup dolor sit amet. AAA BBBB CCCCC").wrap(ratatui::widgets::Wrap { trim: true })));
 		}
 
 		None
@@ -491,6 +506,11 @@ impl Form for FieldEditor {
 				ctx.area.y += 2;
 				ctx.area.height = ctx.area.height.saturating_sub(3);
 				generator.render_form(frame, ctx);
+			});
+		}
+		if let Some(confirm) = &self.confirm {
+			ctx.with_child(|ctx| {
+				confirm.render(frame, ctx);
 			});
 		}
 	}
