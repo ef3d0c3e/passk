@@ -102,7 +102,7 @@ static TEXTINPUT_STYLE: LazyLock<TextInputStyle> = LazyLock::new(|| TextInputSty
 	padding: [0, 0],
 	markers: ["".into(), "".into()],
 	style: Some(Style::default().fg(Color::White)),
-	selected_style: None,
+	style_selected: None,
 });
 static COMBOBOX_STYLE: LazyLock<ComboBoxStyle> = LazyLock::new(|| ComboBoxStyle {
 	padding: Default::default(),

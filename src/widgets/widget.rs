@@ -1,5 +1,3 @@
-use core::panic;
-
 use crossterm::event::KeyEvent;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};

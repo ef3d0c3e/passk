@@ -25,7 +25,7 @@ pub struct TextInputStyle<'s> {
 	/// Style override
 	pub style: Option<Style>,
 	/// Selected style override
-	pub selected_style: Option<Style>,
+	pub style_selected: Option<Style>,
 }
 
 impl Default for TextInputStyle<'_> {
@@ -34,7 +34,7 @@ impl Default for TextInputStyle<'_> {
 			padding: Default::default(),
 			markers: ["[".into(), "]".into()],
 			style: Default::default(),
-			selected_style: Default::default(),
+			style_selected: Default::default(),
 		}
 	}
 }
@@ -45,7 +45,7 @@ impl TextInputStyle<'_> {
 	}
 
 	pub fn style_selected(&self) -> Style {
-		match self.selected_style {
+		match self.style_selected {
 			Some(style) => style,
 			None => Style::default().fg(Color::Yellow),
 		}
@@ -98,6 +98,10 @@ impl<'s> TextInput<'s> {
 		self.grapheme_index = self.grapheme_count;
 		self.input = input;
 		self.cursor_x = self.cursor_x();
+	}
+
+	pub fn get_input(&self) -> &String {
+		&self.input
 	}
 
 	pub fn submit(&self) -> String {

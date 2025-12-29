@@ -9,7 +9,6 @@ use crate::widgets::checkbox::CheckboxStyle;
 use crate::widgets::combo_box::ComboBox;
 use crate::widgets::combo_box::ComboBoxStyle;
 use crate::widgets::combo_box::ComboItem;
-use crate::widgets::confirm::Confirm;
 use crate::widgets::form::Form;
 use crate::widgets::form::FormExt;
 use crate::widgets::form::FormSignal;
@@ -144,7 +143,6 @@ pub struct FieldEditor {
 	scroll: RefCell<u16>,
 
 	generator: Option<FieldGenerator>,
-	confirm: Option<Confirm<'static>>,
 }
 
 static LABEL_STYLE: LazyLock<LabelStyle> = LazyLock::new(|| LabelStyle {
@@ -159,7 +157,7 @@ static TEXTINPUT_STYLE: LazyLock<TextInputStyle> = LazyLock::new(|| TextInputSty
 	padding: [0, 0],
 	markers: ["".into(), "".into()],
 	style: Some(Style::default().fg(Color::White)),
-	selected_style: None,
+	style_selected: None,
 });
 static CHECKBOX_STYLE: LazyLock<CheckboxStyle> = LazyLock::new(|| CheckboxStyle {
 	padding: [1, 0],
@@ -208,7 +206,6 @@ impl FieldEditor {
 			selected: None,
 			scroll: RefCell::default(),
 			generator: None,
-			confirm: None,
 		}
 	}
 
@@ -389,13 +386,6 @@ impl Form for FieldEditor {
 			}
 			return None;
 		}
-		if let Some(confirm) = &mut self.confirm {
-			let v = confirm.input(key);
-			if v && confirm.submit().is_some() {
-				self.confirm = None
-			}
-			return None;
-		}
 
 		// Dispatch input to components
 		if FormExt::input(self, key) {
@@ -452,11 +442,6 @@ impl Form for FieldEditor {
 			self.generator = Some(FieldGenerator::new(format!("Generate for {name}")))
 		}
 
-		let ctrl_pressed = key.modifiers.contains(KeyModifiers::CONTROL);
-		if ctrl_pressed && key.code == KeyCode::Char('o') {
-			self.confirm = Some(Confirm::new("Hello".into(), Paragraph::new("Lorem ipsup dolor sit amet. AAA BBBB CCCCC").wrap(ratatui::widgets::Wrap { trim: true })));
-		}
-
 		None
 	}
 
@@ -506,11 +491,6 @@ impl Form for FieldEditor {
 				ctx.area.y += 2;
 				ctx.area.height = ctx.area.height.saturating_sub(3);
 				generator.render_form(frame, ctx);
-			});
-		}
-		if let Some(confirm) = &self.confirm {
-			ctx.with_child(|ctx| {
-				confirm.render(frame, ctx);
 			});
 		}
 	}

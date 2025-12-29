@@ -1,11 +1,11 @@
 use std::cell::RefCell;
 
+use crate::data::entry::Entry;
 use crate::data::field::Field;
 use crate::data::field::FieldValue;
 use crate::style::ENTRY_BG;
 use crate::style::HELP_LINE_BG;
 use crate::ui::field_editor::FieldEditor;
-use crate::Entry;
 use crate::widgets::confirm::Confirm;
 use crate::widgets::form::Form;
 use crate::widgets::form::FormSignal;
