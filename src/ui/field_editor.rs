@@ -9,6 +9,7 @@ use crate::widgets::checkbox::CheckboxStyle;
 use crate::widgets::combo_box::ComboBox;
 use crate::widgets::combo_box::ComboBoxStyle;
 use crate::widgets::combo_box::ComboItem;
+use crate::widgets::confirm::Confirm;
 use crate::widgets::form::Form;
 use crate::widgets::form::FormExt;
 use crate::widgets::form::FormSignal;
@@ -16,7 +17,6 @@ use crate::widgets::form::FormStyle;
 use crate::widgets::label::LabelDisplay;
 use crate::widgets::label::LabelStyle;
 use crate::widgets::label::Labeled;
-use crate::widgets::popup::Popup;
 use crate::widgets::text_input::TextInput;
 use crate::widgets::text_input::TextInputStyle;
 use crate::widgets::widget::Component;
@@ -144,7 +144,7 @@ pub struct FieldEditor {
 	scroll: RefCell<u16>,
 
 	generator: Option<FieldGenerator>,
-	confirm: Option<Popup<'static>>,
+	confirm: Option<Confirm<'static>>,
 }
 
 static LABEL_STYLE: LazyLock<LabelStyle> = LazyLock::new(|| LabelStyle {
@@ -391,7 +391,7 @@ impl Form for FieldEditor {
 		}
 		if let Some(confirm) = &mut self.confirm {
 			let v = confirm.input(key);
-			if v {
+			if v && confirm.submit().is_some() {
 				self.confirm = None
 			}
 			return None;
@@ -454,7 +454,7 @@ impl Form for FieldEditor {
 
 		let ctrl_pressed = key.modifiers.contains(KeyModifiers::CONTROL);
 		if ctrl_pressed && key.code == KeyCode::Char('o') {
-			self.confirm = Some(Popup::new("Hello".into(), Paragraph::new("Lorem ipsup dolor sit amet. AAA BBBB CCCCC").wrap(ratatui::widgets::Wrap { trim: true })));
+			self.confirm = Some(Confirm::new("Hello".into(), Paragraph::new("Lorem ipsup dolor sit amet. AAA BBBB CCCCC").wrap(ratatui::widgets::Wrap { trim: true })));
 		}
 
 		None

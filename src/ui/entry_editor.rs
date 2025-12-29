@@ -5,8 +5,8 @@ use crate::data::field::FieldValue;
 use crate::style::ENTRY_BG;
 use crate::style::HELP_LINE_BG;
 use crate::ui::field_editor::FieldEditor;
-use crate::widgets::confirm::ConfirmDialog;
 use crate::Entry;
+use crate::widgets::confirm::Confirm;
 use crate::widgets::form::Form;
 use crate::widgets::form::FormSignal;
 use crate::widgets::widget::ComponentRenderCtx;
@@ -40,7 +40,7 @@ pub struct EntryEditor {
 	/// Editor for fields
 	editor: Option<FieldEditor>,
 	/// Confirm dialog
-	confirm: Option<ConfirmDialog<'static>>,
+	confirm: Option<Confirm<'static>>,
 	/// Set to true if modified
 	modified: bool,
 
