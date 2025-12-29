@@ -308,8 +308,14 @@ impl Component for ComboBox<'_, '_> {
 			KeyCode::Char('b') if ctrl_pressed => self.move_cursor_left(),
 			KeyCode::Right => self.move_cursor_right(),
 			KeyCode::Char('f') if ctrl_pressed => self.move_cursor_right(),
-			KeyCode::Char('a') if ctrl_pressed => self.grapheme_index = 0,
-			KeyCode::Char('e') if ctrl_pressed => self.grapheme_index = self.input.len(),
+			KeyCode::Char('a') if ctrl_pressed => {
+				self.grapheme_index = 0;
+				self.cursor_x = self.cursor_x();
+			}
+			KeyCode::Char('e') if ctrl_pressed => {
+				self.grapheme_index = self.input.len();
+				self.cursor_x = self.cursor_x();
+			}
 			// TODO: Ctrl-arrow and kill-word
 			KeyCode::Char(to_insert) if !ctrl_pressed => self.enter_char(to_insert),
 			KeyCode::Backspace => self.delete_char(),

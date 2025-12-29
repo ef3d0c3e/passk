@@ -1,20 +1,15 @@
 use core::panic;
 use std::cell::RefCell;
-use std::char::REPLACEMENT_CHARACTER;
 use std::sync::LazyLock;
 
-use color_eyre::owo_colors::OwoColorize;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyModifiers;
-use ratatui::layout::Constraint;
-use ratatui::layout::Layout;
 use ratatui::style::Color;
 use ratatui::style::Style;
 use ratatui::style::Stylize;
 use ratatui::text::Line;
 use ratatui::text::Span;
-use ratatui::text::Text;
 use ratatui::widgets::Block;
 use ratatui::widgets::Clear;
 use ratatui::widgets::List;
@@ -45,7 +40,7 @@ pub struct ExplorerFilter {
 impl From<&str> for ExplorerFilter {
 	fn from(value: &str) -> Self {
 		let mut filter = Self::default();
-
+		// TODO..
 		let rest = &value[..];
 		while !rest.is_empty() {}
 		filter
@@ -226,8 +221,10 @@ impl Component for Explorer {
 
 		match key.code {
 			KeyCode::Char('/') => self.active = ActiveWidget::Search,
-			KeyCode::Down | KeyCode::Char('j') => self.move_cursor(1),
-			KeyCode::Up | KeyCode::Char('k') => self.move_cursor(-1),
+			KeyCode::Down | KeyCode::Char('j') | KeyCode::Tab => self.move_cursor(1),
+			KeyCode::Char('n') if ctrl_pressed => self.move_cursor(1),
+			KeyCode::Up | KeyCode::Char('k') | KeyCode::BackTab => self.move_cursor(-1),
+			KeyCode::Char('p') if ctrl_pressed => self.move_cursor(-1),
 			KeyCode::Char('e') | KeyCode::Enter => {
 				if !self.entries.is_empty() {
 					let ent = &self.entries[self.filtered_entries[self.selected]];

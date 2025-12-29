@@ -1,6 +1,5 @@
 use std::sync::LazyLock;
 
-use chrono::DateTime;
 use chrono::Utc;
 use clipboard_rs::ClipboardContext;
 use color_eyre::Result;
@@ -31,7 +30,7 @@ struct App {
 
 impl App {
 	pub fn new() -> Self {
-		let mut ents = vec![
+		let ents = vec![
 			data::entry::Entry {
 				name: "test".into(),
 				fields: vec![
