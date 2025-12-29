@@ -15,6 +15,8 @@ use ratatui::widgets::Clear;
 use ratatui::widgets::List;
 use ratatui::widgets::ListItem;
 use ratatui::widgets::ListState;
+use ratatui::widgets::Scrollbar;
+use ratatui::widgets::ScrollbarOrientation;
 use ratatui::widgets::ScrollbarState;
 use ratatui::Frame;
 
@@ -58,11 +60,11 @@ pub enum ActiveWidget {
 static SEARCH_LABEL_STYLE: LazyLock<LabelStyle> = LazyLock::new(|| LabelStyle {
 	padding: [0, 0],
 	display: LabelDisplay::Block {
-		block: Box::new(Block::bordered()),
+		block: Box::new(Block::bordered().border_type(ratatui::widgets::BorderType::Thick)),
 	},
 	style: Some(
 		Style::default()
-			.fg(Color::White)
+			.fg(Color::Black)
 			.bg(Color::from_u32(0x241f31)),
 	),
 	style_selected: Some(
@@ -128,14 +130,12 @@ impl Explorer {
 			return;
 		}
 		if offset > 0 {
-			self.selected += offset as usize;
-			self.selected = std::cmp::min(self.selected, self.filtered_entries.len() - 1);
+			self.selected = std::cmp::min(
+				self.selected + offset as usize,
+				self.filtered_entries.len() - 1,
+			);
 		} else if offset < 0 {
-			if (-offset) as usize > self.selected {
-				self.selected = 0;
-			} else {
-				self.selected -= (-offset) as usize;
-			}
+			self.selected = self.selected.saturating_sub((-offset) as usize);
 		}
 
 		let scrollbar = self.scrollbar.borrow().position(self.selected);
@@ -269,6 +269,7 @@ impl Component for Explorer {
 		let mut ent_area = area;
 		ent_area.y += filter_area.y + filter_area.height;
 		ent_area.height = area.height.saturating_sub(ent_area.y);
+		ent_area.width = ent_area.width.saturating_sub(1);
 
 		let mut items = self
 			.filtered_entries
@@ -285,7 +286,38 @@ impl Component for Explorer {
 		while items.len() < ent_area.height as usize {
 			items.push(Self::format_entry(None, false, items.len()));
 		}
-		frame.render_widget(List::new(items), ent_area);
+
+		let scroll_offset = (self.selected + 1)
+			.saturating_sub(ent_area.height as usize)
+			.min(
+				self.filtered_entries
+					.len()
+					.saturating_sub(ent_area.height as usize),
+			);
+		let mut list_state = self.list_state.borrow_mut();
+		list_state.select(Some(self.selected));
+
+		*self.scrollbar.borrow_mut() = ScrollbarState::new(
+			self.filtered_entries
+				.len()
+				.saturating_sub(ent_area.height as usize)
+				.max(1),
+		)
+		.position(scroll_offset);
+		frame.render_stateful_widget(List::new(items), ent_area, &mut *list_state);
+
+		// Scrollbar
+		let mut scrollbar_area = ent_area;
+		scrollbar_area.x = area.width.saturating_sub(1);
+		scrollbar_area.width = 1;
+
+		frame.render_stateful_widget(
+			Scrollbar::default().orientation(ScrollbarOrientation::VerticalRight),
+			scrollbar_area,
+			&mut *self.scrollbar.borrow_mut(),
+		);
+
+		// TODO: Render scrollbar for the list
 
 		if let Some(editor) = &self.editor {
 			editor.draw(frame, area);
