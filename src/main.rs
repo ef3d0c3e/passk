@@ -1,3 +1,6 @@
+use std::env;
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::LazyLock;
 
 use chrono::Utc;
@@ -9,10 +12,16 @@ use crossterm::event::{self};
 use ratatui::DefaultTerminal;
 use ratatui::Frame;
 
+use crate::data::database::CipherData;
+use crate::data::database::Data;
+use crate::data::database::Database;
+use crate::data::database::KdfData;
 use crate::data::entry::EntryTag;
 use crate::data::field::Field;
 use crate::data::field::FieldValue;
 use crate::ui::explorer::Explorer;
+use crate::ui::password;
+use crate::ui::password::PasswordPrompt;
 use crate::widgets::widget::Component;
 use crate::widgets::widget::ComponentRenderCtx;
 
@@ -26,10 +35,11 @@ pub static CLIPBOARD_CTX: LazyLock<ClipboardContext> =
 
 struct App {
 	explorer: Explorer,
+	password: Option<PasswordPrompt>,
 }
 
 impl App {
-	pub fn new() -> Self {
+	pub fn new(db_name: String) -> Self {
 		let ents = vec![
 			data::entry::Entry {
 				name: "test".into(),
@@ -143,6 +153,7 @@ impl App {
 		];
 		Self {
 			explorer: Explorer::new(ents),
+			password: Some(PasswordPrompt::new(db_name, true)),
 		}
 	}
 
@@ -151,6 +162,12 @@ impl App {
 			terminal.draw(|frame| self.draw(frame))?;
 
 			if let Event::Key(key) = event::read()? {
+				if let Some(password) = &mut self.password {
+					if password.input(&key) {
+						continue;
+					}
+					panic!("Got password: {:#?}", password.submit());
+				}
 				if self.explorer.input(&key) {
 					continue;
 				}
@@ -172,7 +189,12 @@ impl App {
 			depth: 0,
 			cursor: None,
 		};
-		self.explorer.render(frame, &mut ctx);
+		if let Some(password) = &self.password {
+			ctx.selected = true;
+			password.render(frame, &mut ctx);
+		} else {
+			self.explorer.render(frame, &mut ctx);
+		}
 
 		if let Some((_, cursor)) = ctx.cursor {
 			frame.set_cursor_position(cursor);
@@ -180,9 +202,51 @@ impl App {
 	}
 }
 
+fn run(data: &mut Data, ask_password: bool) -> Option<String> {
+	None
+}
+
 fn main() -> Result<()> {
+	/*
+	let args: Vec<String> = env::args().collect();
+	let path = PathBuf::from(&args[0]);
+
+	if !path.exists() {
+		let mut data = Data::default();
+		let password = run(&mut data, true).unwrap();
+
+		let mut salt = [0u8; 16];
+		rand::fill(&mut salt);
+		let db = Database {
+			version: data::database::Version::V1,
+			cipher: CipherData::XChaCha20Poly1305V1 {},
+			kdf: KdfData::Argon2Id {
+				salt,
+				memory: 65536,
+				iterations: 2,
+				key_len: 64,
+				parallelism: 4,
+			},
+			blob: Vec::default(),
+		};
+		// Create DB
+	}
+	*/
+	//let db = Database {
+	//	version: Default::default(),
+	//	cipher: CipherData::XChaCha20Poly1305 { nonce: [0; 24] },
+	//	kdf: KdfData::Argon2Id {
+	//		salt: [0; 16],
+	//		memory: 65536,
+	//		iterations: 3,
+	//		paralellism: true,
+	//	},
+	//	blob: vec![5, 7, 6],
+	//};
+	//println!("{}", serde_json::to_string_pretty(&db).unwrap());
+	//Ok(())
 	let terminal = ratatui::init();
-	let app_result = App::new().run(terminal);
+	let app_result = App::new("Database".into()).run(terminal);
 	ratatui::restore();
 	app_result
 }

@@ -165,7 +165,7 @@ impl Component for Confirm<'_> {
 
 			// Validate
 			KeyCode::Char('y') => self.submit = Some(true),
-			KeyCode::Char('n') | KeyCode::Esc => self.submit = Some(false),
+			KeyCode::Char('n') => self.submit = Some(false),
 			KeyCode::Enter => self.submit = Some(self.selected == 0),
 
 			_ => return false,
