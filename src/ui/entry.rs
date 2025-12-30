@@ -11,11 +11,13 @@ use ratatui::style::Color;
 use ratatui::style::Stylize;
 use ratatui::text::Line;
 use ratatui::text::Span;
+use ratatui::text::Text;
 use ratatui::widgets::Block;
 use ratatui::widgets::Clear;
 use ratatui::widgets::List;
 use ratatui::widgets::ListItem;
 use ratatui::widgets::ListState;
+use ratatui::widgets::Paragraph;
 use ratatui::widgets::ScrollbarState;
 use ratatui::Frame;
 
@@ -31,6 +33,13 @@ use crate::widgets::form::FormSignal;
 use crate::widgets::widget::Component;
 use crate::widgets::widget::ComponentRenderCtx;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum ConfirmAction {
+	Delete,
+	Quit,
+}
+
 pub struct EntryEditor {
 	entry: Entry,
 
@@ -38,7 +47,9 @@ pub struct EntryEditor {
 	selected: Option<usize>,
 
 	modified: bool,
+	save: bool,
 	confirm: Option<Confirm<'static>>,
+	confirm_action: Option<ConfirmAction>,
 
 	editor: Option<FieldEditor>,
 
@@ -54,7 +65,9 @@ impl EntryEditor {
 			copied: None,
 			selected: None,
 			modified: false,
+			save: true,
 			confirm: None,
+			confirm_action: None,
 			editor: None,
 			list_state: RefCell::default(),
 			scrollbar: RefCell::new(ScrollbarState::new(len).position(0)),
@@ -145,12 +158,55 @@ impl EntryEditor {
 			item.bg(ENTRY_BG[id % 2])
 		}
 	}
+
+	pub fn submit(&self) -> Option<Entry> {
+		if !self.save {
+			return None;
+		}
+
+		Some(self.entry.clone())
+	}
 }
 
 impl Component for EntryEditor {
 	fn input(&mut self, key: &KeyEvent) -> bool {
 		let ctrl_pressed = key.modifiers.contains(KeyModifiers::CONTROL);
 		let shift_pressed = key.modifiers.contains(KeyModifiers::SHIFT);
+
+		// Confirm
+		if let Some(confirm) = &mut self.confirm {
+			confirm.input(key);
+			match confirm.submit() {
+				Some(true) => {
+					let action = self.confirm_action.unwrap();
+					match action {
+						ConfirmAction::Delete => {
+							let selected = self.selected.unwrap();
+							self.entry.fields.remove(selected);
+							self.move_selected(-1);
+						}
+						ConfirmAction::Quit => {
+							self.save = true;
+							return false;
+						}
+					}
+				}
+				Some(false) => {
+					let action = self.confirm_action.unwrap();
+					match action {
+						ConfirmAction::Quit => {
+							self.save = false;
+							return false;
+						}
+						_ => {}
+					}
+				}
+				None => return true,
+			}
+			self.confirm = None;
+			self.confirm_action = None;
+			return true;
+		}
 
 		// Field editor
 		if let Some(editor) = &mut self.editor {
@@ -214,7 +270,7 @@ impl Component for EntryEditor {
 					self.entry.fields[selected].value.copy_to_clipboard();
 				}
 			}
-
+			// Edit
 			KeyCode::Char('e') | KeyCode::Enter => {
 				if let Some(selected) = self.selected {
 					let field = &self.entry.fields[selected];
@@ -224,10 +280,25 @@ impl Component for EntryEditor {
 					self.modified = true;
 				}
 			}
+			// Add
 			KeyCode::Char('a') => {
 				self.selected = None;
 				self.editor = Some(FieldEditor::new("New Field".into()));
 				self.modified = true;
+			}
+			// Delete
+			KeyCode::Delete | KeyCode::Char('d') => {
+				if let Some(selected) = self.selected {
+					let field = &self.entry.fields[selected];
+					self.confirm = Some(Confirm::new(
+						format!("Delete field {}", field.name),
+						Paragraph::new(Text::from(format!(
+							"Really delete field '{}'?",
+							field.name
+						))),
+					));
+					self.confirm_action = Some(ConfirmAction::Delete);
+				}
 			}
 			/*
 			KeyCode::Delete | KeyCode::Char('d') => {
@@ -245,7 +316,17 @@ impl Component for EntryEditor {
 			}
 			}
 			*/
-			KeyCode::Esc | KeyCode::Char('q') => return false,
+			KeyCode::Esc | KeyCode::Char('q') => {
+				if self.modified {
+					self.confirm = Some(Confirm::new(
+						"Save Changes".into(),
+						Paragraph::new(Text::from("Exit and save changes?")),
+					));
+					self.confirm_action = Some(ConfirmAction::Quit);
+				} else {
+					return false;
+				}
+			}
 			_ => {}
 		}
 		return true;
@@ -340,6 +421,11 @@ impl Component for EntryEditor {
 			if let Some((_, cursor)) = ctx.cursor {
 				frame.set_cursor_position(cursor);
 			}
+		}
+
+		// Confirm
+		if let Some(confirm) = &self.confirm {
+			confirm.render(frame, ctx);
 		}
 	}
 

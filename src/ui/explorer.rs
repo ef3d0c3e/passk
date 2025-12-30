@@ -211,6 +211,9 @@ impl Component for Explorer {
 		// Entry editor
 		if let Some(editor) = &mut self.editor {
 			if !editor.input(key) {
+				if let Some(ent) = editor.submit() {
+					self.entries[self.selected] = ent;
+				}
 				self.editor = None;
 			}
 			return true;
