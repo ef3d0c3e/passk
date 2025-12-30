@@ -19,6 +19,7 @@ pub enum FormSignal {
 }
 
 pub struct FormStyle {
+	pub border: bool,
 	pub bg: Color,
 }
 
@@ -128,7 +129,7 @@ pub trait FormExt: Form {
 			height: ctx.area.height,
 		};
 
-		// Fill with default color
+		// Fill with background color
 		let bg = Style::default().bg(self.get_style().bg);
 		for y in ctx.area.top()..ctx.area.bottom() {
 			for x in ctx.area.left()..ctx.area.right() {
@@ -191,6 +192,7 @@ pub trait FormExt: Form {
 		(0..self.component_count())
 			.map(|i| self.component(i).unwrap().height())
 			.sum::<u16>()
+			+ if self.get_style().border { 2 } else { 0 }
 	}
 }
 

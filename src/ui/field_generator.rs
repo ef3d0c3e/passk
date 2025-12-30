@@ -142,6 +142,7 @@ impl FieldGenerator {
 			title,
 			style: FormStyle {
 				bg: Color::from_u32(0x2f2f2f),
+				border: true,
 			},
 			prev_charset_type: None,
 			charset_type: Some(CharsetKind::Alphanum),

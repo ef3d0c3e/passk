@@ -5,6 +5,9 @@ use std::sync::LazyLock;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyModifiers;
+use ratatui::layout::Constraint;
+use ratatui::layout::Flex;
+use ratatui::layout::Layout;
 use ratatui::style::Color;
 use ratatui::style::Style;
 use ratatui::style::Stylize;
@@ -25,6 +28,10 @@ use crate::data::entry::EntryTag;
 use crate::style::ENTRY_BG;
 use crate::style::HELP_LINE_BG;
 use crate::ui::entry::EntryEditor;
+use crate::ui::entry_tag_editor::EntryTagEditor;
+use crate::widgets::form::Form;
+use crate::widgets::form::FormExt;
+use crate::widgets::form::FormSignal;
 use crate::widgets::label::LabelDisplay;
 use crate::widgets::label::LabelStyle;
 use crate::widgets::label::Labeled;
@@ -101,6 +108,7 @@ pub struct Explorer {
 	scrollbar: RefCell<ScrollbarState>,
 
 	editor: Option<EntryEditor>,
+	tag_editor: Option<EntryTagEditor>,
 }
 
 impl Explorer {
@@ -120,6 +128,7 @@ impl Explorer {
 			list_state: RefCell::default(),
 			scrollbar: RefCell::new(ScrollbarState::new(len).position(0)),
 			editor: None,
+			tag_editor: None,
 		}
 	}
 
@@ -199,9 +208,25 @@ impl Explorer {
 
 impl Component for Explorer {
 	fn input(&mut self, key: &KeyEvent) -> bool {
+		// Entry editor
 		if let Some(editor) = &mut self.editor {
 			if !editor.input(key) {
 				self.editor = None;
+			}
+			return true;
+		}
+		// Tag editor
+		if let Some(editor) = &mut self.tag_editor {
+			match editor.input_form(key) {
+				Some(FormSignal::Return) => {
+					if let Some(tags) = editor.submit() {
+						self.entries[self.selected].tags = tags;
+					} else { /* TODO */
+					};
+					self.tag_editor = None
+				}
+				Some(FormSignal::Exit) => self.tag_editor = None,
+				_ => {}
 			}
 			return true;
 		}
@@ -229,6 +254,15 @@ impl Component for Explorer {
 				if !self.entries.is_empty() {
 					let ent = &self.entries[self.filtered_entries[self.selected]];
 					self.editor = Some(EntryEditor::new(ent.clone()))
+				}
+			}
+			KeyCode::Char('t') => {
+				if !self.entries.is_empty() {
+					let ent = &self.entries[self.filtered_entries[self.selected]];
+					self.tag_editor = Some(EntryTagEditor::new(
+						format!("Tags for {}", ent.name),
+						&ent.tags,
+					))
 				}
 			}
 			_ => return false,
@@ -312,14 +346,26 @@ impl Component for Explorer {
 		scrollbar_area.width = 1;
 
 		frame.render_stateful_widget(
-			Scrollbar::default().orientation(ScrollbarOrientation::VerticalRight).style(Style::default().fg(Color::from_u32(0x7f7faf))),
+			Scrollbar::default()
+				.orientation(ScrollbarOrientation::VerticalRight)
+				.style(Style::default().fg(Color::from_u32(0x7f7faf))),
 			scrollbar_area,
 			&mut *self.scrollbar.borrow_mut(),
 		);
 
+		// Editor
+		ctx.area = area;
 		if let Some(editor) = &self.editor {
-			ctx.area = area;
 			editor.render(frame, ctx);
+		}
+		// Tag Editor
+		if let Some(editor) = &self.tag_editor {
+			let horizontal = Layout::horizontal([Constraint::Percentage(40)]).flex(Flex::Center);
+			let vertical = Layout::vertical([Constraint::Length(editor.height())]).flex(Flex::Center);
+			let [area] = ctx.area.layout(&horizontal);
+			let [area] = area.layout(&vertical);
+			ctx.area = area;
+			editor.render_form(frame, ctx);
 		}
 	}
 

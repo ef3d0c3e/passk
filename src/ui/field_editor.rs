@@ -190,6 +190,7 @@ impl FieldEditor {
 			title,
 			style: FormStyle {
 				bg: Color::from_u32(0x2f2f2f),
+				border: false
 			},
 			created_at: Utc::now(),
 			field_name: Labeled::new(Span::from("Name"), TextInput::new().style(&TEXTINPUT_STYLE))
