@@ -166,6 +166,10 @@ impl App {
 					if password.input(&key) {
 						continue;
 					}
+					let pwd = password.submit();
+					if pwd.is_none() {
+						return Ok(());
+					}
 					panic!("Got password: {:#?}", password.submit());
 				}
 				if self.explorer.input(&key) {

@@ -9,7 +9,6 @@ use ratatui::layout::Layout;
 use ratatui::layout::Rect;
 use ratatui::style::Color;
 use ratatui::style::Style;
-use ratatui::text::Span;
 use ratatui::text::Text;
 use ratatui::widgets::Block;
 use ratatui::widgets::BorderType;
@@ -17,7 +16,6 @@ use ratatui::widgets::Clear;
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 
-use crate::widgets::confirm::Confirm;
 use crate::widgets::label::LabelDisplay;
 use crate::widgets::label::LabelStyle;
 use crate::widgets::label::Labeled;
@@ -58,6 +56,14 @@ static PASSWORD_INPUT_STYLE: LazyLock<TextInputStyle> = LazyLock::new(|| TextInp
 	),
 });
 
+fn block(title: String) -> Block<'static> {
+	Block::bordered()
+		.title(title)
+		.title_alignment(HorizontalAlignment::Center)
+		.border_type(BorderType::QuadrantOutside)
+		.border_style(Style::default().fg(Color::from_u32(0x7f7f7f)))
+}
+
 pub struct PasswordPrompt {
 	db_name: String,
 	new_password: bool,
@@ -65,6 +71,7 @@ pub struct PasswordPrompt {
 	popup: Option<Popup<'static>>,
 	block: Block<'static>,
 	password: Option<String>,
+	has_confirmation: bool,
 }
 
 impl PasswordPrompt {
@@ -79,15 +86,16 @@ impl PasswordPrompt {
 			)
 			.style(&PASSWORD_LABEL_STYLE),
 			popup: None,
-			block: Block::bordered()
-				.title(title)
-				.title_alignment(HorizontalAlignment::Center)
-				.border_type(BorderType::QuadrantOutside),
+			block: block(title),
 			password: None,
+			has_confirmation: !new_password,
 		}
 	}
 
 	pub fn submit(&self) -> Option<String> {
+		if !self.has_confirmation {
+			return None;
+		}
 		self.password.clone()
 	}
 }
@@ -95,7 +103,7 @@ impl PasswordPrompt {
 impl Component for PasswordPrompt {
 	fn input(&mut self, key: &KeyEvent) -> bool {
 		if let Some(popup) = &mut self.popup {
-			if !popup.input(key) {
+			if popup.input(key) {
 				self.popup = None;
 			}
 			return true;
@@ -103,14 +111,12 @@ impl Component for PasswordPrompt {
 		if self.input.input(key) {
 			return true;
 		}
+
 		match key.code {
 			KeyCode::Enter => {
 				if self.new_password && self.password.is_none() {
 					self.password = Some(self.input.inner.submit());
-					self.block = self
-						.block
-						.clone()
-						.title(format!("Confirm password for '{}'", self.db_name));
+					self.block = block(format!("Confirm password for '{}'", self.db_name));
 					self.input.inner.set_input(String::default());
 				} else if self.new_password {
 					let confirm = self.input.inner.submit();
@@ -120,11 +126,10 @@ impl Component for PasswordPrompt {
 							Paragraph::new(Text::from("Passwords do not match!")),
 						));
 						self.password = None;
-						self.block = self
-							.block
-							.clone()
-							.title(format!("Password for '{}'", self.db_name));
+						self.block = block(format!("Password for '{}'", self.db_name));
+						self.input.inner.set_input(String::default());
 					} else {
+						self.has_confirmation = true;
 						return false;
 					}
 				} else {
@@ -141,7 +146,8 @@ impl Component for PasswordPrompt {
 	}
 
 	fn render(&self, frame: &mut Frame, ctx: &mut ComponentRenderCtx) {
-		let vertical = Layout::vertical([Constraint::Length(2 + self.input.height())]).flex(Flex::Center);
+		let vertical =
+			Layout::vertical([Constraint::Length(2 + self.input.height())]).flex(Flex::Center);
 		let horizontal = Layout::horizontal([Constraint::Percentage(50)]).flex(Flex::Center);
 
 		let area = ctx.area;
@@ -160,6 +166,11 @@ impl Component for PasswordPrompt {
 
 		ctx.area = inner;
 		self.input.render(frame, ctx);
+
+		if let Some(popup) = &self.popup {
+			ctx.area = frame.area();
+			popup.render(frame, ctx);
+		}
 	}
 
 	fn height(&self) -> u16 {
