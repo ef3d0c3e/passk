@@ -1,3 +1,5 @@
+use core::panic;
+use std::cell::RefCell;
 use std::sync::LazyLock;
 
 use crossterm::event::KeyCode;
@@ -16,6 +18,40 @@ use unicode_width::UnicodeWidthStr;
 use crate::widgets::widget::Component;
 
 use super::widget::ComponentRenderCtx;
+
+struct Cached<Crit, T, F, P>
+where
+	Crit: Eq,
+	F: FnMut(P) -> T,
+{
+	crit: Option<Crit>,
+	cached: Option<T>,
+	f: F,
+	_p: std::marker::PhantomData<P>,
+}
+
+impl<Crit, T, F, P> Cached<Crit, T, F, P>
+where
+	Crit: Eq,
+	F: FnMut(P) -> T,
+{
+	pub fn new(f: F) -> Self {
+		Self {
+			crit: None,
+			cached: None,
+			f,
+			_p: std::marker::PhantomData,
+		}
+	}
+
+	pub fn get(&mut self, crit: Crit, params: P) -> &T {
+		if Some(&crit) != self.crit.as_ref() {
+			self.cached = Some((self.f)(params));
+			self.crit = Some(crit);
+		}
+		self.cached.as_ref().unwrap()
+	}
+}
 
 #[derive(Debug, Clone)]
 pub struct TextInputStyle<'s> {
@@ -55,12 +91,14 @@ impl TextInputStyle<'_> {
 static DEFAULT_STYLE: LazyLock<TextInputStyle> = LazyLock::new(TextInputStyle::default);
 
 pub struct TextInput<'s> {
-	input: String,
-	grapheme_count: usize,
-	grapheme_index: usize,
-	cursor_x: u16,
-
 	style: &'s TextInputStyle<'s>,
+
+	input: String,
+	grapheme_index: usize,
+
+	cursor_x: u16,
+	scroll_x: RefCell<u16>,
+	geometry: Vec<u16>,
 }
 
 impl<'s> Default for TextInput<'s> {
@@ -72,11 +110,12 @@ impl<'s> Default for TextInput<'s> {
 impl<'s> TextInput<'s> {
 	pub fn new() -> Self {
 		Self {
+			style: &DEFAULT_STYLE,
 			input: String::default(),
-			grapheme_count: 0,
 			grapheme_index: 0,
 			cursor_x: 0,
-			style: &DEFAULT_STYLE,
+			scroll_x: RefCell::default(),
+			geometry: vec![],
 		}
 	}
 
@@ -86,18 +125,18 @@ impl<'s> TextInput<'s> {
 	}
 
 	pub fn with_input(mut self, input: String) -> Self {
-		self.grapheme_count = input.graphemes(true).count();
-		self.grapheme_index = self.grapheme_count;
 		self.input = input;
-		self.cursor_x = self.cursor_x();
+		self.rebuild_geometry();
+		self.grapheme_index = self.geometry.len();
+		self.update_cursor_x();
 		self
 	}
 
 	pub fn set_input(&mut self, input: String) {
-		self.grapheme_count = input.graphemes(true).count();
-		self.grapheme_index = self.grapheme_count;
 		self.input = input;
-		self.cursor_x = self.cursor_x();
+		self.rebuild_geometry();
+		self.grapheme_index = self.geometry.len();
+		self.update_cursor_x();
 	}
 
 	pub fn get_input(&self) -> &String {
@@ -110,12 +149,12 @@ impl<'s> TextInput<'s> {
 
 	fn move_cursor_left(&mut self) {
 		self.grapheme_index = self.grapheme_index.saturating_sub(1);
-		self.cursor_x = self.cursor_x();
+		self.update_cursor_x();
 	}
 
 	fn move_cursor_right(&mut self) {
-		self.grapheme_index = std::cmp::min(self.grapheme_index + 1, self.grapheme_count);
-		self.cursor_x = self.cursor_x();
+		self.grapheme_index = std::cmp::min(self.grapheme_index + 1, self.geometry.len());
+		self.update_cursor_x();
 	}
 
 	fn enter_char(&mut self, new_char: char) {
@@ -126,10 +165,10 @@ impl<'s> TextInput<'s> {
 			.map(|g| g.len())
 			.sum();
 		self.input.insert(index, new_char);
-		let prev_count = self.grapheme_count;
-		self.grapheme_count = self.input.graphemes(true).count();
-		self.cursor_x = self.cursor_x();
-		if prev_count != self.grapheme_count {
+		let prev_count = self.geometry.len();
+		self.rebuild_geometry();
+		self.update_cursor_x();
+		if prev_count != self.geometry.len() {
 			self.move_cursor_right()
 		}
 	}
@@ -153,16 +192,82 @@ impl<'s> TextInput<'s> {
 			.sum();
 
 		self.input.replace_range(start..end, "");
-		self.grapheme_count -= 1;
+		self.rebuild_geometry();
 		self.move_cursor_left();
 	}
 
-	fn cursor_x(&self) -> u16 {
-		self.input
+	fn update_cursor_x(&mut self) {
+		self.cursor_x = self.geometry[..self.grapheme_index].iter().copied().sum();
+	}
+
+	fn rebuild_geometry(&mut self) {
+		self.geometry = self
+			.input
 			.graphemes(true)
-			.take(self.grapheme_index)
-			.map(|g| UnicodeWidthStr::width(g).max(1))
-			.sum::<usize>() as u16
+			.map(|g| UnicodeWidthStr::width(g).max(1) as u16)
+			.collect();
+	}
+
+	/// Width taken by text in the current viewport
+	fn text_width(&self, viewport_width: u16) -> u16 {
+		viewport_width
+			- self.style.padding[0]
+			- self.style.padding[1]
+			- self.style.markers[0].width() as u16
+			- self.style.markers[1].width() as u16
+	}
+
+	/// Update scroll so that it's position is visible
+	fn ensure_cursor_visible(&self, viewport_width: u16) {
+		let mut scroll_x = *self.scroll_x.borrow();
+
+		if self.cursor_x < scroll_x {
+			scroll_x = self.cursor_x;
+		}
+		if self.cursor_x >= scroll_x + viewport_width {
+			scroll_x = self.cursor_x + 1 - viewport_width;
+		}
+
+		let desired = scroll_x;
+		scroll_x = 0;
+		let grapheme_columns = self.geometry.iter().scan(0, |col, w| {
+			let start = *col;
+			*col += *w;
+			Some(start)
+		});
+		for col in grapheme_columns {
+			if col > desired {
+				break;
+			}
+			scroll_x = col;
+		}
+
+		*self.scroll_x.borrow_mut() = scroll_x;
+	}
+
+	/// Get a span of all graphemes visible inside the viewport
+	fn visible_graphemes(&self, viewport_width: u16) -> Vec<Span<'_>> {
+		let scroll_x = *self.scroll_x.borrow();
+		let mut spans = Vec::new();
+		let mut col = 0;
+
+		for (g, w) in self.input.graphemes(true).zip(self.geometry.iter()) {
+			let next_col = col + *w;
+			// Skip
+			if next_col <= scroll_x {
+				col = next_col;
+				continue;
+			}
+			// Stop
+			if col >= scroll_x + viewport_width {
+				break;
+			}
+
+			spans.push(Span::raw(g.to_string()));
+			col = next_col;
+		}
+
+		spans
 	}
 }
 
@@ -178,11 +283,11 @@ impl Component for TextInput<'_> {
 			KeyCode::Char('f') if ctrl_pressed => self.move_cursor_right(),
 			KeyCode::Char('a') if ctrl_pressed => {
 				self.grapheme_index = 0;
-				self.cursor_x = self.cursor_x();
+				self.update_cursor_x();
 			}
 			KeyCode::Char('e') if ctrl_pressed => {
-				self.grapheme_index = self.input.len();
-				self.cursor_x = self.cursor_x();
+				self.grapheme_index = self.geometry.len();
+				self.update_cursor_x();
 			}
 			// TODO: Ctrl-arrow and kill-word
 			KeyCode::Char(to_insert) if !ctrl_pressed => self.enter_char(to_insert),
@@ -192,33 +297,22 @@ impl Component for TextInput<'_> {
 	}
 
 	fn render(&self, frame: &mut Frame, ctx: &mut ComponentRenderCtx) {
+		let viewport_width = self.text_width(ctx.area.width);
+		self.ensure_cursor_visible(viewport_width);
+
 		let padding_left = Span::raw(" ".repeat(self.style.padding[0] as usize));
 		let padding_right = Span::raw(" ".repeat(self.style.padding[1] as usize));
-		let input_span = Span::from(self.input.as_str());
-		let spw = self
-			.input
-			.graphemes(true)
-			.map(|g| UnicodeWidthStr::width(g).max(1))
-			.sum::<usize>();
-		let empty_space = ctx
-			.area
-			.width
-			.saturating_sub(self.style.padding[0])
-			.saturating_sub(self.style.padding[1])
-			.saturating_sub(self.style.markers[0].width() as u16)
-			.saturating_sub(self.style.markers[1].width() as u16)
-			.saturating_sub(spw as u16);
+		let visible = self.visible_graphemes(viewport_width);
+		let empty_space =
+			viewport_width.saturating_sub(visible.iter().map(|sp| sp.width() as u16).sum());
 		let spacer = Span::raw(" ".repeat(empty_space as usize));
 
-		let draw = Line::from(vec![
-			padding_left,
-			self.style.markers[0].clone(),
-			input_span,
-			spacer,
-			self.style.markers[1].clone(),
-			padding_right,
-		])
-		.set_style(if ctx.selected {
+		let mut comps = vec![padding_left, self.style.markers[0].clone()];
+		comps.extend_from_slice(visible.as_slice());
+		comps.push(spacer);
+		comps.push(self.style.markers[1].clone());
+		comps.push(padding_right);
+		let draw = Line::from(comps).set_style(if ctx.selected {
 			self.style.style_selected()
 		} else {
 			self.style.style()
@@ -231,8 +325,9 @@ impl Component for TextInput<'_> {
 		if ctx.selected {
 			ctx.set_cursor(Position::new(
 				ctx.area.x
-					+ self.cursor_x + self.style.padding[0]
-					+ self.style.markers[0].width() as u16,
+					+ self.style.padding[0]
+					+ self.style.markers[0].width() as u16
+					+ self.cursor_x.saturating_sub(*self.scroll_x.borrow()),
 				ctx.area.y,
 			));
 		}

@@ -6,3 +6,4 @@ pub mod label;
 pub mod text_input;
 pub mod widget;
 pub mod popup;
+pub mod text_input_custom;

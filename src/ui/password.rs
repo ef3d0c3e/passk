@@ -43,7 +43,7 @@ static PASSWORD_LABEL_STYLE: LazyLock<LabelStyle> = LazyLock::new(|| LabelStyle 
 });
 static PASSWORD_INPUT_STYLE: LazyLock<TextInputStyle> = LazyLock::new(|| TextInputStyle {
 	padding: [0, 0],
-	markers: ["".into(), "".into()],
+	markers: ["<".into(), ">".into()],
 	style: Some(
 		Style::default()
 			.fg(Color::White)
