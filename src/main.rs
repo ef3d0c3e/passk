@@ -22,6 +22,8 @@ use crate::data::field::FieldValue;
 use crate::ui::explorer::Explorer;
 use crate::ui::password;
 use crate::ui::password::PasswordPrompt;
+use crate::widgets::form::Form;
+use crate::widgets::form::FormSignal;
 use crate::widgets::widget::Component;
 use crate::widgets::widget::ComponentRenderCtx;
 
@@ -163,11 +165,14 @@ impl App {
 
 			if let Event::Key(key) = event::read()? {
 				if let Some(password) = &mut self.password {
-					if password.input(&key) {
-						continue;
+					match password.input_form(&key) {
+						Some(FormSignal::Return) => {}
+						Some(FormSignal::Exit) => return Ok(()),
+						_ => continue,
 					}
 					let pwd = password.submit();
 					if pwd.is_none() {
+						panic!("No password: {pwd:#?}");
 						return Ok(());
 					}
 					panic!("Got password: {:#?}", password.submit());
@@ -195,7 +200,7 @@ impl App {
 		};
 		if let Some(password) = &self.password {
 			ctx.selected = true;
-			password.render(frame, &mut ctx);
+			password.render_form(frame, &mut ctx);
 		} else {
 			self.explorer.render(frame, &mut ctx);
 		}

@@ -9,19 +9,29 @@ use ratatui::layout::Layout;
 use ratatui::layout::Rect;
 use ratatui::style::Color;
 use ratatui::style::Style;
+use ratatui::text::Span;
 use ratatui::text::Text;
 use ratatui::widgets::Block;
 use ratatui::widgets::BorderType;
 use ratatui::widgets::Clear;
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
+use unicode_segmentation::UnicodeSegmentation;
 
+use crate::widgets::checkbox::Checkbox;
+use crate::widgets::form::Form;
+use crate::widgets::form::FormExt;
+use crate::widgets::form::FormSignal;
+use crate::widgets::form::FormStyle;
 use crate::widgets::label::LabelDisplay;
 use crate::widgets::label::LabelStyle;
 use crate::widgets::label::Labeled;
 use crate::widgets::popup::Popup;
 use crate::widgets::text_input::TextInput;
 use crate::widgets::text_input::TextInputStyle;
+use crate::widgets::text_input_custom::CustomTextInput;
+use crate::widgets::text_input_custom::CustomTextInputStyle;
+use crate::widgets::text_input_custom::TextFormatter;
 use crate::widgets::widget::Component;
 use crate::widgets::widget::ComponentRenderCtx;
 
@@ -41,20 +51,21 @@ static PASSWORD_LABEL_STYLE: LazyLock<LabelStyle> = LazyLock::new(|| LabelStyle 
 			.bg(Color::from_u32(0x241f31)),
 	),
 });
-static PASSWORD_INPUT_STYLE: LazyLock<TextInputStyle> = LazyLock::new(|| TextInputStyle {
-	padding: [0, 0],
-	markers: ["<".into(), ">".into()],
-	style: Some(
-		Style::default()
-			.fg(Color::White)
-			.bg(Color::from_u32(0x241f31)),
-	),
-	style_selected: Some(
-		Style::default()
-			.fg(Color::Cyan)
-			.bg(Color::from_u32(0x241f31)),
-	),
-});
+static PASSWORD_INPUT_STYLE: LazyLock<CustomTextInputStyle> =
+	LazyLock::new(|| CustomTextInputStyle {
+		padding: [0, 0],
+		markers: ["".into(), "".into()],
+		style: Some(
+			Style::default()
+				.fg(Color::White)
+				.bg(Color::from_u32(0x241f31)),
+		),
+		style_selected: Some(
+			Style::default()
+				.fg(Color::Cyan)
+				.bg(Color::from_u32(0x241f31)),
+		),
+	});
 
 fn block(title: String) -> Block<'static> {
 	Block::bordered()
@@ -64,10 +75,34 @@ fn block(title: String) -> Block<'static> {
 		.border_style(Style::default().fg(Color::from_u32(0x7f7f7f)))
 }
 
+struct PasswordFormatter {
+	hidden: bool,
+}
+
+impl<'s> TextFormatter<'s> for PasswordFormatter {
+	fn format(&self, input: &str) -> Vec<ratatui::prelude::Span<'s>> {
+		input
+			.graphemes(true)
+			.map(|gr| {
+				if self.hidden {
+					Span::raw("*".to_owned())
+				} else {
+					Span::raw(gr.to_owned())
+				}
+			})
+			.collect()
+	}
+}
+
 pub struct PasswordPrompt {
+	style: FormStyle,
 	db_name: String,
 	new_password: bool,
-	input: Labeled<'static, TextInput<'static>>,
+
+	selected: usize,
+	input: Labeled<'static, CustomTextInput<'static, PasswordFormatter>>,
+	hidden: Checkbox<'static>,
+
 	popup: Option<Popup<'static>>,
 	block: Block<'static>,
 	password: Option<String>,
@@ -78,13 +113,20 @@ impl PasswordPrompt {
 	pub fn new(db_name: String, new_password: bool) -> Self {
 		let title = format!("Password for '{}'", db_name);
 		Self {
+			style: FormStyle {
+				border: true,
+				bg: Color::from_u32(0x1f1f1f),
+			},
 			db_name,
 			new_password,
+			selected: 0,
 			input: Labeled::new(
 				"Password".into(),
-				TextInput::new().style(&PASSWORD_INPUT_STYLE),
+				CustomTextInput::new(PasswordFormatter { hidden: true })
+					.style(&PASSWORD_INPUT_STYLE),
 			)
 			.style(&PASSWORD_LABEL_STYLE),
+			hidden: Checkbox::new(true, "Hidden".into()),
 			popup: None,
 			block: block(title),
 			password: None,
@@ -100,16 +142,59 @@ impl PasswordPrompt {
 	}
 }
 
-impl Component for PasswordPrompt {
-	fn input(&mut self, key: &KeyEvent) -> bool {
+impl Form for PasswordPrompt {
+	fn component_count(&self) -> usize {
+		2
+	}
+
+	fn component(&self, index: usize) -> Option<&dyn Component> {
+		match index {
+			0 => Some(&self.input),
+			1 => Some(&self.hidden),
+			_ => None,
+		}
+	}
+
+	fn component_mut(&mut self, index: usize) -> Option<&mut dyn Component> {
+		match index {
+			0 => Some(&mut self.input),
+			1 => Some(&mut self.hidden),
+			_ => None,
+		}
+	}
+
+	fn selected(&self) -> Option<usize> {
+		Some(self.selected)
+	}
+
+	fn set_selected(&mut self, selected: Option<usize>) {
+		self.selected = selected.unwrap();
+	}
+
+	fn get_style(&self) -> &crate::widgets::form::FormStyle {
+		&self.style
+	}
+
+	fn scroll(&self) -> u16 {
+		0
+	}
+
+	fn set_scroll(&self, _scroll: u16) {}
+
+	fn input_form(&mut self, key: &KeyEvent) -> Option<crate::widgets::form::FormSignal> {
 		if let Some(popup) = &mut self.popup {
 			if popup.input(key) {
 				self.popup = None;
 			}
-			return true;
+			return None;
 		}
-		if self.input.input(key) {
-			return true;
+		if FormExt::input(self, key) {
+			if self.selected == 1 {
+				self.input.inner.formatter_mut(|fmt| {
+					fmt.hidden = self.hidden.value();
+				})
+			}
+			return None;
 		}
 
 		match key.code {
@@ -130,24 +215,23 @@ impl Component for PasswordPrompt {
 						self.input.inner.set_input(String::default());
 					} else {
 						self.has_confirmation = true;
-						return false;
+						return None;
 					}
 				} else {
 					self.password = Some(self.input.inner.submit());
-					return false;
+					return Some(FormSignal::Return);
 				}
 			}
 			KeyCode::Esc => {
-				return false;
+				return Some(FormSignal::Exit);
 			}
 			_ => {}
 		}
-		true
+		None
 	}
 
-	fn render(&self, frame: &mut Frame, ctx: &mut ComponentRenderCtx) {
-		let vertical =
-			Layout::vertical([Constraint::Length(2 + self.input.height())]).flex(Flex::Center);
+	fn render_form(&self, frame: &mut Frame, ctx: &mut ComponentRenderCtx) {
+		let vertical = Layout::vertical([Constraint::Length(self.height())]).flex(Flex::Center);
 		let horizontal = Layout::horizontal([Constraint::Percentage(50)]).flex(Flex::Center);
 
 		let area = ctx.area;
@@ -165,15 +249,11 @@ impl Component for PasswordPrompt {
 		frame.render_widget(&self.block, area);
 
 		ctx.area = inner;
-		self.input.render(frame, ctx);
+		self.render_body(frame, ctx);
 
 		if let Some(popup) = &self.popup {
 			ctx.area = frame.area();
 			popup.render(frame, ctx);
 		}
-	}
-
-	fn height(&self) -> u16 {
-		self.input.height() + 2
 	}
 }
