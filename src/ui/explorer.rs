@@ -2,6 +2,7 @@ use core::panic;
 use std::cell::RefCell;
 use std::sync::LazyLock;
 
+use chrono::Utc;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyModifiers;
@@ -94,6 +95,36 @@ static SEARCH_INPUT_STYLE: LazyLock<TextInputStyle> = LazyLock::new(|| TextInput
 			.bg(Color::from_u32(0x241f31)),
 	),
 });
+static NEWENTRY_LABEL_STYLE: LazyLock<LabelStyle> = LazyLock::new(|| LabelStyle {
+	padding: [0, 0],
+	display: LabelDisplay::Block {
+		block: Box::new(Block::bordered().border_type(ratatui::widgets::BorderType::Thick)),
+	},
+	style: Some(
+		Style::default()
+			.fg(Color::Black)
+			.bg(Color::from_u32(0x241f31)),
+	),
+	style_selected: Some(
+		Style::default()
+			.fg(Color::Cyan)
+			.bg(Color::from_u32(0x241f31)),
+	),
+});
+static NEWENTRY_INPUT_STYLE: LazyLock<TextInputStyle> = LazyLock::new(|| TextInputStyle {
+	padding: [0, 0],
+	markers: ["".into(), "".into()],
+	style: Some(
+		Style::default()
+			.fg(Color::White)
+			.bg(Color::from_u32(0x241f31)),
+	),
+	style_selected: Some(
+		Style::default()
+			.fg(Color::Cyan)
+			.bg(Color::from_u32(0x241f31)),
+	),
+});
 
 pub struct Explorer {
 	entries: Vec<Entry>,
@@ -107,6 +138,7 @@ pub struct Explorer {
 	list_state: RefCell<ListState>,
 	scrollbar: RefCell<ScrollbarState>,
 
+	new_entry: Option<Labeled<'static, TextInput<'static>>>,
 	editor: Option<EntryEditor>,
 	tag_editor: Option<EntryTagEditor>,
 }
@@ -127,6 +159,7 @@ impl Explorer {
 			filter: Default::default(),
 			list_state: RefCell::default(),
 			scrollbar: RefCell::new(ScrollbarState::new(len).position(0)),
+			new_entry: None,
 			editor: None,
 			tag_editor: None,
 		}
@@ -151,7 +184,10 @@ impl Explorer {
 		*self.scrollbar.borrow_mut() = scrollbar;
 	}
 
-	fn update_filter(&mut self) {}
+	fn update_filter(&mut self) {
+		// TODO
+		self.filtered_entries = (0..self.entries.len()).collect();
+	}
 
 	fn format_entry(ent: Option<&Entry>, selected: bool, id: usize) -> ListItem {
 		fn format_tag(tag: &EntryTag) -> Span {
@@ -204,6 +240,10 @@ impl Explorer {
 
 		ListItem::from(Line::from(comp)).bg(bg)
 	}
+
+	pub fn submit(self) -> Vec<Entry> {
+		self.entries
+	}
 }
 
 impl Component for Explorer {
@@ -230,6 +270,24 @@ impl Component for Explorer {
 				}
 				Some(FormSignal::Exit) => self.tag_editor = None,
 				_ => {}
+			}
+			return true;
+		}
+		// New entry
+		if let Some(new_entry) = &mut self.new_entry {
+			if !new_entry.input(key) {
+				let name = new_entry.inner.submit();
+				let now = Utc::now();
+				self.entries.push(Entry {
+					name,
+					fields: vec![],
+					tags: vec![],
+					created_at: now,
+					modified_at: now,
+					accessed_at: now,
+				});
+				self.new_entry = None;
+				self.update_filter();
 			}
 			return true;
 		}
@@ -268,6 +326,15 @@ impl Component for Explorer {
 					))
 				}
 			}
+			KeyCode::Char('a') => {
+				self.new_entry = Some(
+					Labeled::new(
+						"New Entry".into(),
+						TextInput::new().style(&NEWENTRY_INPUT_STYLE),
+					)
+					.style(&NEWENTRY_LABEL_STYLE),
+				);
+			}
 			_ => return false,
 		}
 		true
@@ -284,6 +351,8 @@ impl Component for Explorer {
 			" (navigate) ".fg(Color::White),
 			"/".bold().fg(Color::Green),
 			" (filter) ".fg(Color::White),
+			"a".bold().fg(Color::Green),
+			" (add) ".fg(Color::White),
 			"esc".bold().fg(Color::Green),
 			" (cancel) ".fg(Color::White),
 			"enter".bold().fg(Color::Green),
@@ -364,11 +433,22 @@ impl Component for Explorer {
 		// Tag Editor
 		if let Some(editor) = &self.tag_editor {
 			let horizontal = Layout::horizontal([Constraint::Percentage(40)]).flex(Flex::Center);
-			let vertical = Layout::vertical([Constraint::Length(editor.height())]).flex(Flex::Center);
+			let vertical =
+				Layout::vertical([Constraint::Length(editor.height())]).flex(Flex::Center);
 			let [area] = ctx.area.layout(&horizontal);
 			let [area] = area.layout(&vertical);
 			ctx.area = area;
 			editor.render_form(frame, ctx);
+		}
+		// New entry
+		if let Some(new_editor) = &self.new_entry {
+			let horizontal = Layout::horizontal([Constraint::Percentage(40)]).flex(Flex::Center);
+			let vertical = Layout::vertical([Constraint::Length(3)]).flex(Flex::Center);
+			let [area] = ctx.area.layout(&horizontal);
+			let [area] = area.layout(&vertical);
+			ctx.area = area;
+			ctx.selected = true;
+			new_editor.render(frame, ctx);
 		}
 	}
 

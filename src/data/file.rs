@@ -1,8 +1,9 @@
+use std::io::Write;
 use std::path::Path;
 
 use crate::data::database::Database;
 
-pub static MAGIC: &'static [u8] = b"\x89PASSK";
+pub static MAGIC: &'static [u8] = b"\xFF\x49\xe0PASSK";
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum PasskVersion {
@@ -49,4 +50,20 @@ pub fn load_database(path: &Path) -> Result<Database, String> {
 	let db: Database = serde_json::from_slice(payload)
 		.map_err(|err| format!("Failed to deserialize '{}': {err}", path.display()))?;
 	Ok(db)
+}
+
+pub fn save_database(database: &Database, path: &Path) -> Result<(), String> {
+	let mut file = std::fs::File::create(path)
+		.map_err(|err| format!("Failed to create '{}': {err}", path.display()))?;
+	let version: &str = PasskVersion::default().into();
+
+	file.write(MAGIC)
+		.map_err(|err| format!("Failed to write MAGIC to '{}': {err}", path.display()))?;
+	file.write(version.as_bytes())
+		.map_err(|err| format!("Failed to write version to '{}': {err}", path.display()))?;
+	file.write(b"\n")
+		.map_err(|err| format!("Failed to write version to '{}': {err}", path.display()))?;
+	file.write(serde_json::to_string(database).unwrap().as_bytes())
+		.map_err(|err| format!("Failed to write content to '{}': {err}", path.display()))?;
+	Ok(())
 }

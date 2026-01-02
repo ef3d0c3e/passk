@@ -1,3 +1,5 @@
+use std::cell::Cell;
+
 use argon2::Argon2;
 use chacha20poly1305::KeyInit;
 use chrono::DateTime;
@@ -46,13 +48,24 @@ pub struct Database {
 	pub blob: Vec<u8>,
 }
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Data {
-	iteration: u64,
-	entries: Vec<Entry>,
+	pub iteration: u64,
+	pub entries: Vec<Entry>,
 
-	created_at: DateTime<Utc>,
-	modified_at: DateTime<Utc>,
+	pub created_at: DateTime<Utc>,
+	pub modified_at: DateTime<Utc>,
+}
+
+impl Default for Data {
+	fn default() -> Self {
+		Self {
+			iteration: Default::default(),
+			entries: Default::default(),
+			created_at: Utc::now(),
+			modified_at: Utc::now(),
+		}
+	}
 }
 
 fn derive_key(kdf: &KdfData, password: &str) -> Result<Vec<u8>, String> {
@@ -109,6 +122,7 @@ pub fn decrypt_database(db: &Database, password: &str) -> Result<Data, String> {
 
 pub fn encrypt_database(data: &Data, db: &Database, password: &str) -> Result<Vec<u8>, String> {
 	let key = derive_key(&db.kdf, password)?;
+	println!("Key: {key:#?}");
 
 	match &db.cipher {
 		CipherData::XChaCha20Poly1305V1 {} => {

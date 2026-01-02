@@ -140,6 +140,10 @@ impl PasswordPrompt {
 		}
 		self.password.clone()
 	}
+
+	pub fn is_new(&self) -> bool {
+		self.new_password
+	}
 }
 
 impl Form for PasswordPrompt {
@@ -215,7 +219,7 @@ impl Form for PasswordPrompt {
 						self.input.inner.set_input(String::default());
 					} else {
 						self.has_confirmation = true;
-						return None;
+						return Some(FormSignal::Return);
 					}
 				} else {
 					self.password = Some(self.input.inner.submit());

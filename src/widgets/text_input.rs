@@ -1,4 +1,3 @@
-use core::panic;
 use std::cell::RefCell;
 use std::sync::LazyLock;
 
@@ -18,40 +17,6 @@ use unicode_width::UnicodeWidthStr;
 use crate::widgets::widget::Component;
 
 use super::widget::ComponentRenderCtx;
-
-struct Cached<Crit, T, F, P>
-where
-	Crit: Eq,
-	F: FnMut(P) -> T,
-{
-	crit: Option<Crit>,
-	cached: Option<T>,
-	f: F,
-	_p: std::marker::PhantomData<P>,
-}
-
-impl<Crit, T, F, P> Cached<Crit, T, F, P>
-where
-	Crit: Eq,
-	F: FnMut(P) -> T,
-{
-	pub fn new(f: F) -> Self {
-		Self {
-			crit: None,
-			cached: None,
-			f,
-			_p: std::marker::PhantomData,
-		}
-	}
-
-	pub fn get(&mut self, crit: Crit, params: P) -> &T {
-		if Some(&crit) != self.crit.as_ref() {
-			self.cached = Some((self.f)(params));
-			self.crit = Some(crit);
-		}
-		self.cached.as_ref().unwrap()
-	}
-}
 
 #[derive(Debug, Clone)]
 pub struct TextInputStyle<'s> {
