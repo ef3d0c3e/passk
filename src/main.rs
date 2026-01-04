@@ -1,3 +1,4 @@
+use core::panic;
 use std::cell::OnceCell;
 use std::env;
 use std::path::PathBuf;
@@ -9,6 +10,7 @@ use color_eyre::Result;
 use crossterm::event::Event;
 use crossterm::event::KeyCode;
 use crossterm::event::{self};
+use getopts::Options;
 use ratatui::text::Text;
 use ratatui::widgets::Paragraph;
 use ratatui::DefaultTerminal;
@@ -22,6 +24,7 @@ use crate::data::database::Database;
 use crate::data::database::KdfData;
 use crate::data::file::load_database;
 use crate::data::file::save_database;
+use crate::data::file::PasskVersion;
 use crate::ui::explorer::Explorer;
 use crate::ui::password::PasswordPrompt;
 use crate::widgets::form::Form;
@@ -206,9 +209,55 @@ impl App {
 	}
 }
 
+fn print_usage(program: &str, opts: Options) {
+	let brief = format!("Usage: {program} [OPTIONS] path/to/database.pk");
+	print!("{}", opts.usage(&brief));
+}
+
+fn print_version() {
+	print!(
+		"PassK -- A simple password manager
+Copyright (c) 2026 ef3d0c3e
+PassK is licensed under the GNU General Public License version 3 (GPLv3),
+under the terms of the Free Software Foundation <https://www.gnu.org/licenses/gpl-3.0.en.html>.
+
+This program is free software; you may modify and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+
+PassK version: {}\n",
+		<&'static str>::from(PasskVersion::default())
+	)
+}
+
 fn main() -> Result<()> {
 	let args: Vec<String> = env::args().collect();
-	let path = PathBuf::from(&args[1]);
+	let program = &args[0];
+
+	let mut opts = Options::new();
+	opts.optflag("h", "help", "Display help menu");
+	opts.optflag("v", "version", "Display program version");
+
+	let m = match opts.parse(&args[1..]) {
+		Ok(m) => m,
+		Err(err) => {
+			panic!("{err}");
+		}
+	};
+	if m.opt_present("h") {
+		print_usage(&program, opts);
+		return Ok(());
+	}
+	if m.opt_present("v") {
+		print_version();
+		return Ok(());
+	}
+	if m.free.len() != 1
+	{
+		eprintln!("Expected path to a database file");
+		return Ok(())
+	}
+
+	let path = PathBuf::from(&m.free[0]);
 
 	let name = &args[1][args[1].rfind('/').unwrap_or(0)..];
 

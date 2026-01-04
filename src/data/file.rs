@@ -6,7 +6,7 @@ use crate::data::database::Database;
 pub static MAGIC: &[u8] = b"\xFF\x00\x91PASSK";
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum PasskVersion {
+pub enum PasskVersion {
 	#[default]
 	V0_1,
 }
