@@ -14,11 +14,13 @@ use ratatui::style::Style;
 use ratatui::style::Stylize;
 use ratatui::text::Line;
 use ratatui::text::Span;
+use ratatui::text::Text;
 use ratatui::widgets::Block;
 use ratatui::widgets::Clear;
 use ratatui::widgets::List;
 use ratatui::widgets::ListItem;
 use ratatui::widgets::ListState;
+use ratatui::widgets::Paragraph;
 use ratatui::widgets::Scrollbar;
 use ratatui::widgets::ScrollbarOrientation;
 use ratatui::widgets::ScrollbarState;
@@ -30,6 +32,7 @@ use crate::style::ENTRY_BG;
 use crate::style::HELP_LINE_BG;
 use crate::ui::entry::EntryEditor;
 use crate::ui::entry_tag_editor::EntryTagEditor;
+use crate::widgets::confirm::Confirm;
 use crate::widgets::form::Form;
 use crate::widgets::form::FormExt;
 use crate::widgets::form::FormSignal;
@@ -50,10 +53,53 @@ pub struct ExplorerFilter {
 impl From<&str> for ExplorerFilter {
 	fn from(value: &str) -> Self {
 		let mut filter = Self::default();
-		// TODO..
-		let rest = &value[..];
-		while !rest.is_empty() {}
+		let mut rest = &value[..];
+		loop {
+			while rest.starts_with(" ") || rest.starts_with("\t") {
+				rest = &rest[1..];
+			}
+			if rest.is_empty() {
+				break;
+			}
+			let end = rest
+				.chars()
+				.position(|c| c == ' ' || c == '\t')
+				.unwrap_or(rest.len());
+			if rest.starts_with("+") {
+				filter.tags.push(String::from(&rest[1..end]));
+			} else {
+				if !filter.name.is_empty() {
+					filter.name.push(' ');
+				}
+				filter.name += &rest[..end];
+			}
+			rest = &rest[end..];
+		}
 		filter
+	}
+}
+
+impl ExplorerFilter {
+	pub fn filter(&self, ent: &Entry) -> bool {
+		// Tags
+		for tag in &self.tags {
+			let mut found = false;
+			for ent_tag in &ent.tags {
+				if tag == &ent_tag.name {
+					found = true;
+					break;
+				}
+			}
+			if !found {
+				return false;
+			}
+		}
+
+		// Name
+		ent.name
+			.to_lowercase()
+			.as_str()
+			.contains(self.name.to_lowercase().as_str())
 	}
 }
 
@@ -63,6 +109,12 @@ pub enum ActiveWidget {
 	#[default]
 	Search,
 	Content,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum ConfirmAction {
+	Delete,
 }
 
 static SEARCH_LABEL_STYLE: LazyLock<LabelStyle> = LazyLock::new(|| LabelStyle {
@@ -141,6 +193,9 @@ pub struct Explorer {
 	new_entry: Option<Labeled<'static, TextInput<'static>>>,
 	editor: Option<EntryEditor>,
 	tag_editor: Option<EntryTagEditor>,
+
+	confirm_action: Option<ConfirmAction>,
+	confirm: Option<Confirm<'static>>,
 }
 
 impl Explorer {
@@ -162,6 +217,8 @@ impl Explorer {
 			new_entry: None,
 			editor: None,
 			tag_editor: None,
+			confirm_action: None,
+			confirm: None,
 		}
 	}
 
@@ -185,8 +242,15 @@ impl Explorer {
 	}
 
 	fn update_filter(&mut self) {
-		// TODO
-		self.filtered_entries = (0..self.entries.len()).collect();
+		let filter = ExplorerFilter::from(self.filter_field.inner.get_input().as_str());
+		self.filtered_entries.clear();
+		for (id, ent) in self.entries.iter().enumerate()
+		{
+			if filter.filter(ent)
+			{
+				self.filtered_entries.push(id);
+			}
+		}
 	}
 
 	fn format_entry(ent: Option<&Entry>, selected: bool, id: usize) -> ListItem {
@@ -291,10 +355,30 @@ impl Component for Explorer {
 			}
 			return true;
 		}
+		// Confirm
+		if let Some(confirm) = &mut self.confirm {
+			confirm.input(key);
+			match confirm.submit() {
+				Some(true) => {
+					if self.confirm_action == Some(ConfirmAction::Delete) {
+						self.entries.remove(self.filtered_entries[self.selected]);
+						self.update_filter();
+						self.move_cursor(-1);
+					}
+					self.confirm = None;
+				}
+				Some(false) => {
+					self.confirm = None;
+				}
+				_ => {}
+			}
+			return true;
+		}
 
 		let ctrl_pressed = key.modifiers.contains(KeyModifiers::CONTROL);
 		if self.active == ActiveWidget::Search {
 			if self.filter_field.inner.input(key) {
+				self.update_filter();
 				return true;
 			}
 			match key.code {
@@ -324,6 +408,18 @@ impl Component for Explorer {
 						format!("Tags for {}", ent.name),
 						&ent.tags,
 					))
+				}
+			}
+			KeyCode::Char('d') => {
+				if !self.entries.is_empty() {
+					self.confirm_action = Some(ConfirmAction::Delete);
+					self.confirm = Some(Confirm::new(
+						"Confirm Deletion".into(),
+						Paragraph::new(Text::from(format!(
+							"Delete entry: '{}'?",
+							self.entries[self.filtered_entries[self.selected]].name
+						))),
+					));
 				}
 			}
 			KeyCode::Char('a') => {
@@ -449,6 +545,10 @@ impl Component for Explorer {
 			ctx.area = area;
 			ctx.selected = true;
 			new_editor.render(frame, ctx);
+		}
+		// Confirm
+		if let Some(confirm) = &self.confirm {
+			confirm.render(frame, ctx);
 		}
 	}
 
