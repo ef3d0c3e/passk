@@ -1,25 +1,36 @@
-use std::cell::Cell;
-
 use argon2::Argon2;
 use chacha20poly1305::KeyInit;
 use chrono::DateTime;
 use chrono::Utc;
 use serde::Deserialize;
 use serde::Serialize;
+use serde_with::base64::Base64;
+use serde_with::serde_as;
 
 use crate::data::entry::Entry;
 
+/// Database format version
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Version {
 	#[default]
 	V1,
 }
 
+/// Database cipher
 #[derive(Clone, Serialize, Deserialize)]
 pub enum CipherData {
 	XChaCha20Poly1305V1 {},
 }
 
+impl CipherData {
+	pub fn key_len(&self) -> usize {
+		match self {
+			CipherData::XChaCha20Poly1305V1 {} => 32,
+		}
+	}
+}
+
+/// Cipher-specific data
 #[derive(Clone, Serialize, Deserialize)]
 pub struct XChaCha20Poly1305BlobV1 {
 	nonce: [u8; 24],
@@ -27,6 +38,7 @@ pub struct XChaCha20Poly1305BlobV1 {
 	ciphertext: Vec<u8>,
 }
 
+/// HKDF data
 #[derive(Clone, Serialize, Deserialize)]
 pub enum KdfData {
 	Argon2Id {
@@ -38,6 +50,8 @@ pub enum KdfData {
 	},
 }
 
+/// Database
+#[serde_as]
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Database {
 	pub version: Version,
@@ -45,10 +59,12 @@ pub struct Database {
 	pub kdf: KdfData,
 
 	// Cipher specific data
+	#[serde_as(as = "Base64")]
 	pub blob: Vec<u8>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+/// Database content
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Data {
 	pub iteration: u64,
 	pub entries: Vec<Entry>,
@@ -122,7 +138,6 @@ pub fn decrypt_database(db: &Database, password: &str) -> Result<Data, String> {
 
 pub fn encrypt_database(data: &Data, db: &Database, password: &str) -> Result<Vec<u8>, String> {
 	let key = derive_key(&db.kdf, password)?;
-	println!("Key: {key:#?}");
 
 	match &db.cipher {
 		CipherData::XChaCha20Poly1305V1 {} => {

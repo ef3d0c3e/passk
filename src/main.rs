@@ -1,3 +1,4 @@
+use core::panic;
 use std::cell::OnceCell;
 use std::env;
 use std::path::Path;
@@ -10,21 +11,24 @@ use color_eyre::Result;
 use crossterm::event::Event;
 use crossterm::event::KeyCode;
 use crossterm::event::{self};
+use ratatui::text::Text;
+use ratatui::widgets::Paragraph;
 use ratatui::DefaultTerminal;
 use ratatui::Frame;
 
 use crate::data::database::decrypt_database;
+use crate::data::database::encrypt_database;
 use crate::data::database::CipherData;
 use crate::data::database::Data;
 use crate::data::database::Database;
 use crate::data::database::KdfData;
-use crate::data::database::encrypt_database;
 use crate::data::file::load_database;
 use crate::data::file::save_database;
 use crate::ui::explorer::Explorer;
 use crate::ui::password::PasswordPrompt;
 use crate::widgets::form::Form;
 use crate::widgets::form::FormSignal;
+use crate::widgets::popup::Popup;
 use crate::widgets::widget::Component;
 use crate::widgets::widget::ComponentRenderCtx;
 
@@ -43,9 +47,31 @@ struct App {
 	data: OnceCell<Data>,
 	explorer: OnceCell<Explorer>,
 	password_prompt: Option<PasswordPrompt>,
+
+	message: Option<Popup<'static>>,
 }
 
 impl App {
+	fn error(&mut self, message: String) {
+		self.message = Some(Popup::new(
+			"Error".into(),
+			Paragraph::new(Text::from(message)),
+		));
+	}
+
+	fn get_data(&mut self) -> (String, Data, Database) {
+		let password = self.password.get().cloned().unwrap();
+		let mut data = self.data.get().cloned().unwrap();
+		data.entries = self
+			.explorer
+			.get()
+			.map(|explorer| explorer.submit())
+			.unwrap();
+		let db = self.db.clone();
+
+		(password, data, db)
+	}
+
 	pub fn new(path: PathBuf) -> Result<Self, String> {
 		let (db, new) = if !path.exists() {
 			let mut salt = [0u8; 16];
@@ -58,7 +84,7 @@ impl App {
 						salt,
 						memory: 65536,
 						iterations: 2,
-						key_len: 32,
+						key_len: CipherData::XChaCha20Poly1305V1 {}.key_len() as u16,
 						parallelism: 2,
 					},
 					blob: vec![],
@@ -75,6 +101,7 @@ impl App {
 			data: OnceCell::default(),
 			explorer: OnceCell::default(),
 			password_prompt: Some(PasswordPrompt::new("Name".into(), new)),
+			message: None,
 		})
 	}
 
@@ -83,6 +110,7 @@ impl App {
 			terminal.draw(|frame| self.draw(frame))?;
 
 			if let Event::Key(key) = event::read()? {
+				// Password prompt
 				if let Some(password) = &mut self.password_prompt {
 					match password.input_form(&key) {
 						Some(FormSignal::Return) => {}
@@ -97,7 +125,13 @@ impl App {
 						Data::default()
 					} else {
 						// Decrypt data
-						decrypt_database(&self.db, pwd.as_str()).map_err(|err| eyre::eyre!(err))?
+						match decrypt_database(&self.db, pwd.as_str()) {
+							Ok(data) => data,
+							Err(err) => {
+								password.set_error("Invalid Password".into(), format!("Failed to decrypt database: {err}"));
+								continue
+							}
+						}
 					};
 					self.password.set(pwd).unwrap();
 					self.explorer
@@ -106,8 +140,16 @@ impl App {
 						.unwrap();
 					self.data.set(data).unwrap();
 					self.password_prompt = None;
-					continue
+					continue;
 				}
+				// Message
+				if let Some(message) = &mut self.message {
+					if !message.input(&key) {
+						self.message = None;
+					}
+					continue;
+				}
+				// Explorer
 				if let Some(explorer) = self.explorer.get_mut() {
 					if explorer.input(&key) {
 						continue;
@@ -116,14 +158,20 @@ impl App {
 
 				match key.code {
 					KeyCode::Char('q') => {
-						let mut data = self.data.take().unwrap();
-						data.entries = self.explorer.take().unwrap().submit();
-						let password = self.password.take().unwrap();
-						let mut db = self.db.clone();
-						db.blob = encrypt_database(&data, &self.db, &password).unwrap();
-						save_database(&db, &self.path).unwrap();
-						return Ok(())
-					},
+						let (password, data, mut db) = self.get_data();
+						db.blob = match encrypt_database(&data, &self.db, &password) {
+							Ok(blob) => blob,
+							Err(err) => {
+								self.error(format!("Failed to encrypt database: {err}"));
+								continue;
+							}
+						};
+						if let Err(err) = save_database(&db, &self.path) {
+							self.error(format!("Failed to save database: {err}"));
+							continue;
+						}
+						return Ok(());
+					}
 					_ => {}
 				}
 			}
@@ -139,10 +187,18 @@ impl App {
 			depth: 0,
 			cursor: None,
 		};
+		// Password prompt
 		if let Some(password) = &self.password_prompt {
 			ctx.selected = true;
 			password.render_form(frame, &mut ctx);
-		} else if let Some(explorer) = self.explorer.get() {
+		}
+		// Message
+		else if let Some(message) = &self.message {
+			ctx.selected = true;
+			message.render(frame, &mut ctx);
+		}
+		// Explorer
+		else if let Some(explorer) = self.explorer.get() {
 			explorer.render(frame, &mut ctx);
 		}
 

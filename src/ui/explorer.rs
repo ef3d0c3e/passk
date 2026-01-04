@@ -241,8 +241,8 @@ impl Explorer {
 		ListItem::from(Line::from(comp)).bg(bg)
 	}
 
-	pub fn submit(self) -> Vec<Entry> {
-		self.entries
+	pub fn submit(&self) -> Vec<Entry> {
+		self.entries.clone()
 	}
 }
 

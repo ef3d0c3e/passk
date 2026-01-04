@@ -144,6 +144,10 @@ impl PasswordPrompt {
 	pub fn is_new(&self) -> bool {
 		self.new_password
 	}
+
+	pub fn set_error(&mut self, title: String, message: String) {
+		self.popup = Some(Popup::new(title, Paragraph::new(Text::from(message))));
+	}
 }
 
 impl Form for PasswordPrompt {
@@ -203,6 +207,14 @@ impl Form for PasswordPrompt {
 
 		match key.code {
 			KeyCode::Enter => {
+				if self.input.inner.get_input().is_empty() {
+					self.popup = Some(Popup::new(
+						"Invalid Password".into(),
+						Paragraph::new(Text::from("Password is empty!")),
+					));
+					return None;
+				}
+
 				if self.new_password && self.password.is_none() {
 					self.password = Some(self.input.inner.submit());
 					self.block = block(format!("Confirm password for '{}'", self.db_name));

@@ -41,7 +41,7 @@ pub fn load_database(path: &Path) -> Result<Database, String> {
 	}
 	let nl = bytes
 		.iter()
-		.rposition(|c| *c == b'\n')
+		.position(|c| *c == b'\n')
 		.ok_or(format!("Invalid header in '{}'", path.display()))?;
 	let _ = PasskVersion::try_from(&bytes[MAGIC.len()..nl])
 		.map_err(|err| format!("Invaid header in '{}': {err}", path.display()))?;
