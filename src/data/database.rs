@@ -11,6 +11,7 @@ use crate::data::entry::Entry;
 
 /// Database format version
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Version {
 	#[default]
 	V1,

@@ -70,7 +70,7 @@ impl App {
 		(password, data, db)
 	}
 
-	pub fn new(path: PathBuf) -> Result<Self, String> {
+	pub fn new(name: String, path: PathBuf) -> Result<Self, String> {
 		let (db, new) = if !path.exists() {
 			let mut salt = [0u8; 16];
 			rand::fill(&mut salt);
@@ -98,7 +98,7 @@ impl App {
 			password: OnceCell::default(),
 			data: OnceCell::default(),
 			explorer: OnceCell::default(),
-			password_prompt: Some(PasswordPrompt::new("Name".into(), new)),
+			password_prompt: Some(PasswordPrompt::new(name, new)),
 			message: None,
 		})
 	}
@@ -126,8 +126,11 @@ impl App {
 						match decrypt_database(&self.db, pwd.as_str()) {
 							Ok(data) => data,
 							Err(err) => {
-								password.set_error("Invalid Password".into(), format!("Failed to decrypt database: {err}"));
-								continue
+								password.set_error(
+									"Invalid Password".into(),
+									format!("Failed to decrypt database: {err}"),
+								);
+								continue;
 							}
 						}
 					};
@@ -155,20 +158,20 @@ impl App {
 				}
 
 				if let KeyCode::Char('q') = key.code {
-    						let (password, data, mut db) = self.get_data();
-    						db.blob = match encrypt_database(&data, &self.db, &password) {
-    							Ok(blob) => blob,
-    							Err(err) => {
-    								self.error(format!("Failed to encrypt database: {err}"));
-    								continue;
-    							}
-    						};
-    						if let Err(err) = save_database(&db, &self.path) {
-    							self.error(format!("Failed to save database: {err}"));
-    							continue;
-    						}
-    						return Ok(());
-    					}
+					let (password, data, mut db) = self.get_data();
+					db.blob = match encrypt_database(&data, &self.db, &password) {
+						Ok(blob) => blob,
+						Err(err) => {
+							self.error(format!("Failed to encrypt database: {err}"));
+							continue;
+						}
+					};
+					if let Err(err) = save_database(&db, &self.path) {
+						self.error(format!("Failed to save database: {err}"));
+						continue;
+					}
+					return Ok(());
+				}
 			}
 		}
 	}
@@ -207,43 +210,10 @@ fn main() -> Result<()> {
 	let args: Vec<String> = env::args().collect();
 	let path = PathBuf::from(&args[1]);
 
-	/*
-	if !path.exists() {
-		let mut data = Data::default();
-		let password = run(&mut data, true).unwrap();
+	let name = &args[1][args[1].rfind('/').unwrap_or(0)..];
 
-		let mut salt = [0u8; 16];
-		rand::fill(&mut salt);
-		let db = Database {
-			version: data::database::Version::V1,
-			cipher: CipherData::XChaCha20Poly1305V1 {},
-			kdf: KdfData::Argon2Id {
-				salt,
-				memory: 65536,
-				iterations: 2,
-				key_len: 64,
-				parallelism: 4,
-			},
-			blob: Vec::default(),
-		};
-		// Create DB
-	}
-	*/
-	//let db = Database {
-	//	version: Default::default(),
-	//	cipher: CipherData::XChaCha20Poly1305 { nonce: [0; 24] },
-	//	kdf: KdfData::Argon2Id {
-	//		salt: [0; 16],
-	//		memory: 65536,
-	//		iterations: 3,
-	//		paralellism: true,
-	//	},
-	//	blob: vec![5, 7, 6],
-	//};
-	//println!("{}", serde_json::to_string_pretty(&db).unwrap());
-	//Ok(())
 	let terminal = ratatui::init();
-	let app_result = App::new(path)
+	let app_result = App::new(name.into(), path)
 		.map_err(|err| eyre::eyre!(err))?
 		.run(terminal);
 	ratatui::restore();

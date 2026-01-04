@@ -189,6 +189,7 @@ pub struct Explorer {
 	scrollbar: RefCell<ScrollbarState>,
 
 	new_entry: Option<Labeled<'static, TextInput<'static>>>,
+	rename: Option<Labeled<'static, TextInput<'static>>>,
 	editor: Option<EntryEditor>,
 	tag_editor: Option<EntryTagEditor>,
 
@@ -212,6 +213,7 @@ impl Explorer {
 			list_state: RefCell::default(),
 			scrollbar: RefCell::new(ScrollbarState::new(len).position(0)),
 			new_entry: None,
+			rename: None,
 			editor: None,
 			tag_editor: None,
 			confirm_action: None,
@@ -241,10 +243,9 @@ impl Explorer {
 	fn update_filter(&mut self) {
 		let filter = ExplorerFilter::from(self.filter_field.inner.get_input().as_str());
 		self.filtered_entries.clear();
-		for (id, ent) in self.entries.iter().enumerate()
-		{
-			if filter.filter(ent)
-			{
+
+		for (id, ent) in self.entries.iter().enumerate() {
+			if filter.filter(ent) {
 				self.filtered_entries.push(id);
 			}
 		}
@@ -302,6 +303,14 @@ impl Explorer {
 		ListItem::from(Line::from(comp)).bg(bg)
 	}
 
+	fn current_entry(&self) -> &Entry {
+		&self.entries[self.filtered_entries[self.selected]]
+	}
+
+	fn current_entry_mut(&mut self) -> &mut Entry {
+		&mut self.entries[self.filtered_entries[self.selected]]
+	}
+
 	pub fn submit(&self) -> Vec<Entry> {
 		self.entries.clone()
 	}
@@ -309,6 +318,8 @@ impl Explorer {
 
 impl Component for Explorer {
 	fn input(&mut self, key: &KeyEvent) -> bool {
+		let ctrl_pressed = key.modifiers.contains(KeyModifiers::CONTROL);
+
 		// Entry editor
 		if let Some(editor) = &mut self.editor {
 			if !editor.input(key) {
@@ -336,19 +347,37 @@ impl Component for Explorer {
 		}
 		// New entry
 		if let Some(new_entry) = &mut self.new_entry {
-			if !new_entry.input(key) {
-				let name = new_entry.inner.submit();
-				let now = Utc::now();
-				self.entries.push(Entry {
-					name,
-					fields: vec![],
-					tags: vec![],
-					created_at: now,
-					modified_at: now,
-					accessed_at: now,
-				});
+			if key.code == KeyCode::Esc {
 				self.new_entry = None;
-				self.update_filter();
+			} else if !new_entry.input(key) {
+				let name = new_entry.inner.submit();
+				if !name.trim().is_empty() {
+					let now = Utc::now();
+					self.entries.push(Entry {
+						name,
+						fields: vec![],
+						tags: vec![],
+						created_at: now,
+						modified_at: now,
+						accessed_at: now,
+					});
+					self.new_entry = None;
+					self.update_filter();
+				}
+			}
+			return true;
+		}
+		// Rename
+		if let Some(rename) = &mut self.rename {
+			if key.code == KeyCode::Esc {
+				self.rename = None;
+			} else if !rename.input(key) {
+				let name = rename.inner.submit();
+				if !name.trim().is_empty() {
+					self.current_entry_mut().name = name;
+					self.rename = None;
+					self.update_filter();
+				}
 			}
 			return true;
 		}
@@ -372,7 +401,6 @@ impl Component for Explorer {
 			return true;
 		}
 
-		let ctrl_pressed = key.modifiers.contains(KeyModifiers::CONTROL);
 		if self.active == ActiveWidget::Search {
 			if self.filter_field.inner.input(key) {
 				self.update_filter();
@@ -394,13 +422,12 @@ impl Component for Explorer {
 			KeyCode::Char('p') if ctrl_pressed => self.move_cursor(-1),
 			KeyCode::Char('e') | KeyCode::Enter => {
 				if !self.entries.is_empty() {
-					let ent = &self.entries[self.filtered_entries[self.selected]];
-					self.editor = Some(EntryEditor::new(ent.clone()))
+					self.editor = Some(EntryEditor::new(self.current_entry().clone()))
 				}
 			}
 			KeyCode::Char('t') => {
 				if !self.entries.is_empty() {
-					let ent = &self.entries[self.filtered_entries[self.selected]];
+					let ent = self.current_entry();
 					self.tag_editor = Some(EntryTagEditor::new(
 						format!("Tags for {}", ent.name),
 						&ent.tags,
@@ -410,13 +437,15 @@ impl Component for Explorer {
 			KeyCode::Char('d') => {
 				if !self.entries.is_empty() {
 					self.confirm_action = Some(ConfirmAction::Delete);
-					self.confirm = Some(Confirm::new(
+					let mut confirm = Confirm::new(
 						"Confirm Deletion".into(),
 						Paragraph::new(Text::from(format!(
 							"Delete entry: '{}'?",
-							self.entries[self.filtered_entries[self.selected]].name
+							self.current_entry().name
 						))),
-					));
+					);
+					confirm.set_selected(1);
+					self.confirm = Some(confirm);
 				}
 			}
 			KeyCode::Char('a') => {
@@ -427,6 +456,19 @@ impl Component for Explorer {
 					)
 					.style(&NEWENTRY_LABEL_STYLE),
 				);
+			}
+			KeyCode::Char('r') => {
+				if !self.filtered_entries.is_empty() {
+					self.rename = Some(
+						Labeled::new(
+							"Rename".into(),
+							TextInput::new()
+								.style(&NEWENTRY_INPUT_STYLE)
+								.with_input(self.current_entry().name.clone()),
+						)
+						.style(&NEWENTRY_LABEL_STYLE),
+					);
+				}
 			}
 			_ => return false,
 		}
@@ -446,8 +488,12 @@ impl Component for Explorer {
 			" (filter) ".fg(Color::White),
 			"a".bold().fg(Color::Green),
 			" (add) ".fg(Color::White),
-			"esc".bold().fg(Color::Green),
-			" (cancel) ".fg(Color::White),
+			"d".bold().fg(Color::Green),
+			" (delete) ".fg(Color::White),
+			"r".bold().fg(Color::Green),
+			" (rename) ".fg(Color::White),
+			"q".bold().fg(Color::Green),
+			" (quit) ".fg(Color::White),
 			"enter".bold().fg(Color::Green),
 			" (open) ".fg(Color::White),
 		])
@@ -542,6 +588,16 @@ impl Component for Explorer {
 			ctx.area = area;
 			ctx.selected = true;
 			new_editor.render(frame, ctx);
+		}
+		// Rename
+		if let Some(rename) = &self.rename {
+			let horizontal = Layout::horizontal([Constraint::Percentage(40)]).flex(Flex::Center);
+			let vertical = Layout::vertical([Constraint::Length(3)]).flex(Flex::Center);
+			let [area] = ctx.area.layout(&horizontal);
+			let [area] = area.layout(&vertical);
+			ctx.area = area;
+			ctx.selected = true;
+			rename.render(frame, ctx);
 		}
 		// Confirm
 		if let Some(confirm) = &self.confirm {
