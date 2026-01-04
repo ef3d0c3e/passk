@@ -1,7 +1,5 @@
-use core::panic;
 use std::cell::OnceCell;
 use std::env;
-use std::path::Path;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
@@ -156,24 +154,21 @@ impl App {
 					}
 				}
 
-				match key.code {
-					KeyCode::Char('q') => {
-						let (password, data, mut db) = self.get_data();
-						db.blob = match encrypt_database(&data, &self.db, &password) {
-							Ok(blob) => blob,
-							Err(err) => {
-								self.error(format!("Failed to encrypt database: {err}"));
-								continue;
-							}
-						};
-						if let Err(err) = save_database(&db, &self.path) {
-							self.error(format!("Failed to save database: {err}"));
-							continue;
-						}
-						return Ok(());
-					}
-					_ => {}
-				}
+				if let KeyCode::Char('q') = key.code {
+    						let (password, data, mut db) = self.get_data();
+    						db.blob = match encrypt_database(&data, &self.db, &password) {
+    							Ok(blob) => blob,
+    							Err(err) => {
+    								self.error(format!("Failed to encrypt database: {err}"));
+    								continue;
+    							}
+    						};
+    						if let Err(err) = save_database(&db, &self.path) {
+    							self.error(format!("Failed to save database: {err}"));
+    							continue;
+    						}
+    						return Ok(());
+    					}
 			}
 		}
 	}

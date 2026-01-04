@@ -49,7 +49,7 @@ impl Default for ConfirmStyle<'_> {
 	}
 }
 
-static DEFAULT_STYLE: LazyLock<ConfirmStyle> = LazyLock::new(|| ConfirmStyle::default());
+static DEFAULT_STYLE: LazyLock<ConfirmStyle> = LazyLock::new(ConfirmStyle::default);
 
 #[derive(Clone, Copy)]
 struct HeightCache {

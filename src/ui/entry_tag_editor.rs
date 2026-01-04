@@ -66,7 +66,7 @@ impl EntryTagEditor {
 		let mut rest = &self.input.inner.get_input()[..];
 		// TODO: Create a global tag registry to source icons/colors froms
 		loop {
-			if let Some(next) = rest.find(|c| c == ',') {
+			if let Some(next) = rest.find(',') {
 				rest.trim();
 				result.push(EntryTag {
 					name: rest[..next].to_string(),

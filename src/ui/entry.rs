@@ -193,13 +193,10 @@ impl Component for EntryEditor {
 				}
 				Some(false) => {
 					let action = self.confirm_action.unwrap();
-					match action {
-						ConfirmAction::Quit => {
-							self.save = false;
-							return false;
-						}
-						_ => {}
-					}
+					if action == ConfirmAction::Quit {
+     							self.save = false;
+     							return false;
+     						}
 				}
 				None => return true,
 			}
@@ -329,7 +326,7 @@ impl Component for EntryEditor {
 			}
 			_ => {}
 		}
-		return true;
+		true
 	}
 
 	fn render(&self, frame: &mut Frame, ctx: &mut ComponentRenderCtx) {

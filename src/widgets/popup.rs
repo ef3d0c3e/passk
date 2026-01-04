@@ -41,7 +41,7 @@ impl Default for PopupStyle<'_> {
 	}
 }
 
-static DEFAULT_STYLE: LazyLock<PopupStyle> = LazyLock::new(|| PopupStyle::default());
+static DEFAULT_STYLE: LazyLock<PopupStyle> = LazyLock::new(PopupStyle::default);
 
 #[derive(Clone, Copy)]
 struct HeightCache {

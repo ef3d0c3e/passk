@@ -27,8 +27,6 @@ use crate::widgets::label::LabelDisplay;
 use crate::widgets::label::LabelStyle;
 use crate::widgets::label::Labeled;
 use crate::widgets::popup::Popup;
-use crate::widgets::text_input::TextInput;
-use crate::widgets::text_input::TextInputStyle;
 use crate::widgets::text_input_custom::CustomTextInput;
 use crate::widgets::text_input_custom::CustomTextInputStyle;
 use crate::widgets::text_input_custom::TextFormatter;

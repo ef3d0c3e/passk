@@ -3,7 +3,7 @@ use std::path::Path;
 
 use crate::data::database::Database;
 
-pub static MAGIC: &'static [u8] = b"\xFF\x49\xe0PASSK";
+pub static MAGIC: &[u8] = b"\xFF\x49\xe0PASSK";
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum PasskVersion {
@@ -11,9 +11,9 @@ enum PasskVersion {
 	V0_1,
 }
 
-impl Into<&'static str> for PasskVersion {
-	fn into(self) -> &'static str {
-		match self {
+impl From<PasskVersion> for &'static str {
+	fn from(val: PasskVersion) -> Self {
+		match val {
 			PasskVersion::V0_1 => "0.1",
 		}
 	}

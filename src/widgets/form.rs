@@ -114,7 +114,7 @@ pub trait FormExt: Form {
 			}
 			_ => return false,
 		}
-		return true;
+		true
 	}
 
 	/// Render the form body

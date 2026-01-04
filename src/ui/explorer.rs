@@ -53,7 +53,7 @@ pub struct ExplorerFilter {
 impl From<&str> for ExplorerFilter {
 	fn from(value: &str) -> Self {
 		let mut filter = Self::default();
-		let mut rest = &value[..];
+		let mut rest = value;
 		loop {
 			while rest.starts_with(" ") || rest.starts_with("\t") {
 				rest = &rest[1..];
@@ -185,8 +185,6 @@ pub struct Explorer {
 	selected: usize,
 
 	filter_field: Labeled<'static, TextInput<'static>>,
-	filter: ExplorerFilter,
-
 	list_state: RefCell<ListState>,
 	scrollbar: RefCell<ScrollbarState>,
 
@@ -211,7 +209,6 @@ impl Explorer {
 				TextInput::new().style(&SEARCH_INPUT_STYLE),
 			)
 			.style(&SEARCH_LABEL_STYLE),
-			filter: Default::default(),
 			list_state: RefCell::default(),
 			scrollbar: RefCell::new(ScrollbarState::new(len).position(0)),
 			new_entry: None,
@@ -253,8 +250,8 @@ impl Explorer {
 		}
 	}
 
-	fn format_entry(ent: Option<&Entry>, selected: bool, id: usize) -> ListItem {
-		fn format_tag(tag: &EntryTag) -> Span {
+	fn format_entry(ent: Option<&Entry>, selected: bool, id: usize) -> ListItem<'_> {
+		fn format_tag(tag: &EntryTag) -> Span<'_> {
 			let style = Style::default()
 				.fg(Color::from_u32(tag.color.unwrap_or(0xDEA13B)))
 				.italic();
@@ -274,7 +271,7 @@ impl Explorer {
 		// Name
 		let mut rest = &ent.name[..];
 		loop {
-			let Some(next) = rest.find(|c| c == '/') else {
+			let Some(next) = rest.find('/') else {
 				comp.push(Span::styled(rest, Style::default().fg(Color::Green).bold()));
 				break;
 			};
@@ -284,7 +281,7 @@ impl Explorer {
 			));
 			comp.push(Span::styled(
 				"/",
-				Style::default().fg(Color::from_u32(0xAf5f5f)).bold(),
+				Style::default().fg(Color::from_u32(0xaf5f5f)).bold(),
 			));
 			rest = &rest[next + 1..]
 		}
